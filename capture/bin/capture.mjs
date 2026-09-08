@@ -15,7 +15,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright';
-import { assertOnboarded, login } from '../src/auth.mjs';
+import { assertOnboarded, fetchSessionUserId, login } from '../src/auth.mjs';
 import { captureAll } from '../src/capture.mjs';
 import { LAUNCH_ARGS, PLAYWRIGHT_VERSION } from '../src/determinism.mjs';
 import { assertFixturesAgree, resolveAll } from '../src/resolve.mjs';
@@ -36,7 +36,7 @@ const log = (message) => console.log(`  ${message}`);
 function required(name) {
     const value = process.env[name];
     if (!value) {
-        console.error(`::error::${name} is not set. See screenshots/README.md.`);
+        console.error(`::error::${name} is not set. See the repo README.`);
         process.exit(1);
     }
     return value;
@@ -46,8 +46,13 @@ async function main() {
     const baseUrl = (process.env.BASE_URL ?? 'http://localhost:4200').replace(/\/$/, '');
     const apiHost = (process.env.API_HOST ?? 'http://localhost:8000').replace(/\/$/, '');
     const namespace = process.env.API_NAMESPACE ?? 'int/v1';
-    const identity = required('DEMO_IDENTITY');
-    const password = required('DEMO_PASSWORD');
+    // Credentials are only needed when this script has to log in for itself. The normal
+    // path is scripts/capture.sh, which authenticates first, freezes the server-side
+    // timestamps that a login writes, and passes the token in — see the SHOWCASE_TOKEN comment
+    // below. Requiring an identity we are not going to use would make that path impossible.
+    const hasToken = Boolean(process.env.SHOWCASE_TOKEN);
+    const identity = hasToken ? (process.env.SHOWCASE_IDENTITY ?? null) : required('SHOWCASE_IDENTITY');
+    const password = hasToken ? null : required('SHOWCASE_PASSWORD');
 
     // A version skew between the npm package and the parity Docker image means two different
     // Chromium builds, which means two different rasterizers, which means every file reads as
@@ -82,7 +87,26 @@ async function main() {
     // an un-onboarded install answers every route with the same onboarding screen, so without
     // this check the run would "succeed" and publish 36 identical images.
     await assertOnboarded({ apiHost, namespace });
-    const { token } = await login({ apiHost, namespace, identity, password });
+
+    // SHOWCASE_TOKEN lets the caller authenticate BEFORE the capture, which is what
+    // scripts/capture.sh does — and it is not a convenience.
+    //
+    // Logging in writes `last_login` on the user row, and that column is rendered on the IAM
+    // users screen. A login performed inside the capture therefore stamps wall-clock time into
+    // a screenshot, and the file differs on every single run for a reason that has nothing to
+    // do with the UI. Measured: with an in-capture login, 6 of 8 files were byte-identical
+    // across two runs and the two users screens were not.
+    //
+    // So the order has to be: log in once, freeze the timestamps, then capture with the token
+    // already in hand.
+    const token =
+        process.env.SHOWCASE_TOKEN || (await login({ apiHost, namespace, identity, password })).token;
+
+    // Fetched before the browser starts because the theme is persisted per user under
+    // `<uuid>:theme`, and that persisted option is the only thing that beats the server's
+    // brand default. Discovering the uuid after boot instead is a race that silently
+    // leaves every capture on the brand theme.
+    const userId = await fetchSessionUserId({ apiHost, namespace, token });
     log('authenticated');
 
     const ids = await resolveAll({ apiHost, namespace, token }, entries);
@@ -120,6 +144,7 @@ async function main() {
             baseUrl,
             apiHost,
             token,
+            userId,
             tileCache,
             outDir,
             log,

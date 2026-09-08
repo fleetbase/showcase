@@ -40,6 +40,9 @@ x-api-env: &api-env
   SESSION_DOMAIN: localhost
   MAIL_MAILER: log
   LOG_CHANNEL: stderr
+  # DEBUG floods every seeder run with cache-invalidation lines, which buries the
+  # SEEDED_FIXTURES output the capture depends on greping for.
+  LOG_LEVEL: warning
   REGISTRY_HOST: https://registry.fleetbase.io
   REGISTRY_PREINSTALLED_EXTENSIONS: "true"
   OSRM_HOST: https://router.project-osrm.org

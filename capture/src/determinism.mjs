@@ -116,7 +116,7 @@ input, textarea { caret-color: transparent !important; }
  * All of it goes through addInitScript so it survives the in-app reloads and redirects
  * (/login -> /onboard -> /) that the console performs during boot.
  */
-export async function applyInitScripts(context, { token, theme, apiHost }) {
+export async function applyInitScripts(context, { token, theme, apiHost, userId }) {
     // ember-simple-auth's adaptive store reads this key on boot. The shape is the login
     // response body with the authenticator name injected — see the precedent test at
     // console/tests/unit/models/report-test.js:414. The token must be a genuine Sanctum
@@ -126,10 +126,21 @@ export async function applyInitScripts(context, { token, theme, apiHost }) {
         authenticated: { authenticator: 'authenticator:fleetbase', token, type: 'user' },
     });
 
-    // currentUser.id is 'anon' until the user model resolves, and the theme service reads
-    // the option during ApplicationRoute.activate() — i.e. possibly while still anon. This
-    // covers the pre-user window; ensureTheme() covers the post-user one.
-    const userOptions = JSON.stringify({ 'anon:theme': theme });
+    // THE THEME. Playwright's `colorScheme` is NOT sufficient, and this is not obvious.
+    //
+    // The theme service resolves in this order: persisted user option -> initialTheme ->
+    // prefers-color-scheme -> 'dark'. But the server also serves a brand default
+    // (GET int/v1/settings/branding -> brand.default_theme, which ships as "dark"), and the
+    // console applies it — so on a stock install `prefers-color-scheme: light` is simply
+    // ignored and every capture comes out dark. Verified: emulating light and dark both
+    // produced body[data-theme="dark"].
+    //
+    // The persisted option is the one lever that wins. Keys are `<user uuid>:theme`, so the
+    // uuid has to be known before boot, which is why bin/capture.mjs fetches it from
+    // auth/session up front. `anon:theme` covers the window before the user model resolves.
+    const options = { 'anon:theme': theme };
+    if (userId) options[`${userId}:theme`] = theme;
+    const userOptions = JSON.stringify(options);
 
     await context.addInitScript(
         ({ session, userOptions, styles }) => {

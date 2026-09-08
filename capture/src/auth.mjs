@@ -50,6 +50,35 @@ export async function login({ apiHost, namespace = 'int/v1', identity, password 
 }
 
 /**
+ * The authenticated user's uuid — the prefix of every key in the console's
+ * `@fleetbase/storage:user-options` bucket.
+ *
+ * Needed BEFORE the browser boots. The theme is persisted per user under `<uuid>:theme`, and
+ * that persisted option is the only thing that beats the server's brand default (see
+ * applyInitScripts for why that matters). Reading the uuid out of the bucket after boot also
+ * works, but only once the current user has resolved — which is a race. On a slow boot the
+ * bucket still holds nothing but `anon` keys, the repair writes the wrong key, and the theme
+ * silently stays on the brand default. That is exactly how the first light-theme run failed.
+ */
+export async function fetchSessionUserId({ apiHost, namespace = 'int/v1', token }) {
+    const response = await fetch(`${apiHost}/${namespace}/auth/session`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error(`could not read auth/session: HTTP ${response.status}`);
+    }
+
+    const body = await response.json().catch(() => ({}));
+
+    if (!body?.user) {
+        throw new Error(`auth/session returned no user id: ${JSON.stringify(body).slice(0, 200)}`);
+    }
+
+    return body.user;
+}
+
+/**
  * Confirm the install is past onboarding before any navigation is attempted.
  *
  * routes/auth/login.js calls installation.checkOnboarding() in beforeModel and redirects to

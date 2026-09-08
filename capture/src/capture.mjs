@@ -70,6 +70,7 @@ export async function captureAll({
     baseUrl,
     apiHost,
     token,
+    userId,
     tileCache,
     outDir,
     log = () => {},
@@ -83,7 +84,7 @@ export async function captureAll({
         const context = await browser.newContext(
             contextOptions({ viewport: manifest.viewport, theme })
         );
-        await applyInitScripts(context, { token, theme, apiHost });
+        await applyInitScripts(context, { token, theme, apiHost, userId });
 
         const page = await context.newPage();
         await installRoutes(page, {
