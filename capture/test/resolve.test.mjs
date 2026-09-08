@@ -35,6 +35,13 @@ test('accepts a bare array response as well as { data: [...] }', async () => {
     assert.equal(await resolvePublicId(API, SPEC), 'driver_abc123');
 });
 
+test('reads a collection keyed by resource name', async () => {
+    // Fleetbase's internal index endpoints answer `{"drivers": [...]}`, not `{data: [...]}`.
+    // Assuming `data` yields zero rows and a "got 0" error that looks like missing fixtures.
+    stubFetch(() => ({ json: { drivers: [{ name: 'Amara Chen', public_id: 'driver_abc123' }] } }));
+    assert.equal(await resolvePublicId(API, SPEC), 'driver_abc123');
+});
+
 test('falls back to an unfiltered page when ?query= returns nothing', async () => {
     // Not every internal index endpoint honours ?query=. Concluding "no such record" from an
     // empty first response would fail runs for resources that simply ignore the parameter.

@@ -1,0 +1,250 @@
+<?php
+
+// PORTED from fleetbase/fleetops server/seeders/Testing/OrdersSeeder.php.
+//
+// Flattened rather than subclassed, and that is forced. The upstream seeders `use
+// SeedsTestingData`, whose SEED_NAME is a trait CONSTANT — PHP rejects a class that redeclares
+// a trait constant with a different value, so a subclass here would tag its rows
+// `fleetops-testing` and be purged by fleetops' own TestingSeeder. See
+// seeders/Concerns/SeedsShowcaseData.php.
+//
+// The bodies are upstream's. What differs is the visible strings: presentable names, real
+// addresses, FLT- identifiers instead of TEST-. Keep structural changes in sync with upstream
+// when it moves; the fixture DATA here is deliberately ours.
+
+namespace Database\Seeders\Showcase\FleetOps;
+
+use Fleetbase\FleetOps\Models\Contact;
+use Fleetbase\FleetOps\Models\Driver;
+use Fleetbase\FleetOps\Models\Entity;
+use Fleetbase\FleetOps\Models\Order;
+use Fleetbase\FleetOps\Models\Payload;
+use Fleetbase\FleetOps\Models\Place;
+use Fleetbase\FleetOps\Models\TrackingNumber;
+use Fleetbase\FleetOps\Models\TrackingStatus;
+use Fleetbase\FleetOps\Models\Vehicle;
+use Fleetbase\FleetOps\Models\Vendor;
+use Fleetbase\FleetOps\Models\Waypoint;
+use Database\Seeders\Showcase\Concerns\SeedsShowcaseData;
+use Database\Seeders\Showcase\FleetOps\Concerns\BelongsToFleetOps;
+use Fleetbase\FleetOps\Support\FleetOps;
+use Fleetbase\Models\Company;
+use Fleetbase\Models\User;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+
+class OrdersSeeder extends Seeder
+{
+    use SeedsShowcaseData;
+    use BelongsToFleetOps;
+
+    public function run(): void
+    {
+        $company = $this->prepareCompany();
+        if (!$company) {
+            return;
+        }
+
+        DB::transaction(function () use ($company) {
+            $this->purgeSeedData();
+            $this->seedOrders($company);
+
+            $this->command?->info('Seeded ' . $this->seedName() . ' order fixtures for company: ' . $company->public_id);
+        });
+    }
+
+    public function purgeSeedData(): void
+    {
+        $this->purgeModel(TrackingStatus::class);
+        $this->purgeModel(Order::class);
+        $this->purgeModel(Entity::class);
+        $this->purgeModel(Waypoint::class);
+        $this->purgeModel(TrackingNumber::class);
+        $this->purgeModel(Payload::class);
+    }
+
+    /**
+     * The human-facing order reference. Overridable because it is the most visible string on
+     * the orders table, and because src/resolve.mjs in the screenshots package looks a
+     * specific order up by exactly this value.
+     */
+    protected const INTERNAL_IDS = [
+        'order_created_unassigned' => 'FLT-1001',
+        'order_scheduled'          => 'FLT-1002',
+        'order_dispatched'         => 'FLT-1003',
+        'order_started'            => 'FLT-1004',
+        'order_completed'          => 'FLT-1005',
+        'order_canceled'           => 'FLT-1006',
+        'order_vehicle_assigned'   => 'FLT-1007',
+    ];
+
+    /**
+     * Sequential references in declaration order, rather than upstream's TEST-<SEED_ID>.
+     *
+     * capture/manifests/fleet-ops.mjs resolves the order-details screenshot by looking
+     * FLT-1004 up through the internal API — records get a fresh public_id on every seed, so
+     * the URL cannot be written into the manifest. Changing a value here breaks that lookup.
+     * It fails loudly rather than screenshotting the wrong order, but it does fail.
+     */
+    protected function orderInternalId(string $seedId): string
+    {
+        return static::INTERNAL_IDS[$seedId]
+            ?? $this->identifierPrefix() . '-' . strtoupper(str_replace('order_', '', $seedId));
+    }
+
+    /** The label shown for the nth item inside an order's payload. */
+    protected function entityNameFor(string $seedId, int $index): string
+    {
+        // "Item 1" is fine for an assertion and poor on a marketing page.
+        $names = ['Document envelope', 'Small parcel', 'Carton', 'Insulated tote', 'Pallet'];
+
+        return $names[($index - 1) % count($names)];
+    }
+
+    protected function seedOrders(Company $company): void
+    {
+        $places = [
+            'central_depot'  => $this->seededModel(Place::class, 'central_depot'),
+            'west_depot'     => $this->seededModel(Place::class, 'west_depot'),
+            'airport_hub'    => $this->seededModel(Place::class, 'airport_hub'),
+            'orchard_store'  => $this->seededModel(Place::class, 'orchard_store'),
+            'rochor_store'   => $this->seededModel(Place::class, 'rochor_store'),
+            'tampines_store' => $this->seededModel(Place::class, 'tampines_store'),
+        ];
+        $customers = [
+            'customer_alice' => $this->seededModel(Contact::class, 'customer_alice'),
+            'customer_ben'   => $this->seededModel(Contact::class, 'customer_ben'),
+        ];
+        $drivers = [
+            'driver_ava' => $this->seededModel(Driver::class, 'driver_ava'),
+            'driver_ken' => $this->seededModel(Driver::class, 'driver_ken'),
+        ];
+        $vehicles = [
+            'van_central' => $this->seededModel(Vehicle::class, 'van_central'),
+            'van_east'    => $this->seededModel(Vehicle::class, 'van_east'),
+        ];
+        $facilitator = $this->seededModel(Vendor::class, 'facilitator_fastline');
+        $dispatcher  = $this->seededModel(User::class, 'dispatcher_user');
+        $orderConfig = FleetOps::createTransportConfig($company);
+
+        $orders = [
+            'order_created_unassigned' => ['created', null, null, 'customer_alice', 'central_depot', 'orchard_store', [], 2, 1, null, false, false],
+            'order_scheduled'          => ['created', null, null, 'customer_ben', 'west_depot', 'rochor_store', [], 4, 1, $this->timestamp(30), false, false],
+            'order_dispatched'         => ['dispatched', 'driver_ava', 'van_central', 'customer_alice', 'central_depot', 'orchard_store', ['rochor_store'], 6, 2, null, true, false],
+            'order_started'            => ['started', 'driver_ken', 'van_east', 'customer_ben', 'airport_hub', 'tampines_store', [], 8, 1, null, true, true],
+            'order_completed'          => ['completed', 'driver_ava', 'van_central', 'customer_alice', 'central_depot', 'orchard_store', [], -4, 1, null, true, true],
+            'order_canceled'           => ['canceled', null, null, 'customer_ben', 'central_depot', 'rochor_store', [], -2, 1, null, false, false],
+            'order_vehicle_assigned'   => ['created', null, 'van_central', 'customer_alice', 'west_depot', 'airport_hub', ['orchard_store', 'rochor_store'], 10, 3, null, false, false],
+        ];
+
+        foreach ($orders as $seedId => [$status, $driverSeedId, $vehicleSeedId, $customerSeedId, $pickupSeedId, $dropoffSeedId, $waypointSeedIds, $hourOffset, $entityCount, $scheduledAt, $dispatched, $started]) {
+            $payload = $this->createPayload($company, $seedId, $places[$pickupSeedId], $places[$dropoffSeedId], array_map(fn ($placeSeedId) => $places[$placeSeedId], $waypointSeedIds));
+            $order   = $this->createRecord(Order::class, [
+                '_key'                  => $this->fixtureKey($seedId),
+                'internal_id'           => $this->orderInternalId($seedId),
+                'company_uuid'          => $company->uuid,
+                'payload_uuid'          => $payload->uuid,
+                'order_config_uuid'     => $orderConfig->uuid,
+                'customer_uuid'         => $customers[$customerSeedId]?->uuid,
+                'customer_type'         => Contact::class,
+                'facilitator_uuid'      => $facilitator?->uuid,
+                'facilitator_type'      => Vendor::class,
+                'driver_assigned_uuid'  => $driverSeedId ? $drivers[$driverSeedId]?->uuid : null,
+                'vehicle_assigned_uuid' => $vehicleSeedId ? $vehicles[$vehicleSeedId]?->uuid : null,
+                'created_by_uuid'       => $dispatcher?->uuid,
+                'updated_by_uuid'       => $dispatcher?->uuid,
+                'scheduled_at'          => $scheduledAt,
+                'dispatched_at'         => $dispatched ? $this->timestamp($hourOffset) : null,
+                'dispatched'            => $dispatched,
+                'started'               => $started,
+                'started_at'            => $started ? $this->timestamp($hourOffset + 1) : null,
+                'type'                  => 'transport',
+                'status'                => $status,
+                'notes'                 => $this->fixtureNote('order'),
+                'pod_method'            => 'scan',
+                'pod_required'          => $status === 'completed',
+                'orchestrator_priority' => 50,
+                'required_skills'       => $vehicleSeedId === 'van_east' ? ['cold_chain'] : [],
+                'meta'                  => $this->meta($seedId),
+                'created_at'            => $this->timestamp($hourOffset),
+                'updated_at'            => $this->timestamp($hourOffset + 1),
+            ]);
+
+            $trackingNumber = $this->createTrackingNumber($company, $order, $seedId);
+            $order->forceFill(['tracking_number_uuid' => $trackingNumber->uuid])->save();
+            $this->seedEntities($company, $payload, $trackingNumber, $seedId, $entityCount, $places[$dropoffSeedId]);
+        }
+    }
+
+    protected function createPayload(Company $company, string $seedId, ?Place $pickup, ?Place $dropoff, array $waypoints): Payload
+    {
+        /** @var Payload $payload */
+        $payload = $this->createRecord(Payload::class, [
+            '_key'         => $this->fixtureKey($seedId . '_payload'),
+            'company_uuid' => $company->uuid,
+            'pickup_uuid'  => $pickup?->uuid,
+            'dropoff_uuid' => $dropoff?->uuid,
+            'type'         => 'transport',
+            'meta'         => $this->meta($seedId . '_payload'),
+        ]);
+
+        foreach ($waypoints as $index => $place) {
+            $this->createRecord(Waypoint::class, [
+                '_key'         => $this->fixtureKey($seedId . '_waypoint_' . ($index + 1)),
+                '_import_id'   => $this->fixtureKey($seedId . ':waypoint:' . ($index + 1)),
+                'company_uuid' => $company->uuid,
+                'payload_uuid' => $payload->uuid,
+                'place_uuid'   => $place?->uuid,
+                'type'         => 'dropoff',
+                'order'        => $index + 1,
+                'service_time' => 300,
+                'notes'        => $this->fixtureNote('waypoint'),
+            ]);
+        }
+
+        return $payload;
+    }
+
+    protected function createTrackingNumber(Company $company, Order $order, string $seedId): TrackingNumber
+    {
+        /** @var TrackingNumber $trackingNumber */
+        $trackingNumber = $this->createRecord(TrackingNumber::class, [
+            '_key'            => $this->fixtureKey($seedId . '_tracking'),
+            'company_uuid'    => $company->uuid,
+            'owner_uuid'      => $order->uuid,
+            'owner_type'      => Order::class,
+            'tracking_number' => $this->identifierPrefix() . '-' . str_pad((string) crc32($seedId), 10, '0', STR_PAD_LEFT),
+            'region'          => 'SG',
+        ]);
+
+        return $trackingNumber;
+    }
+
+    protected function seedEntities(Company $company, Payload $payload, TrackingNumber $trackingNumber, string $seedId, int $entityCount, ?Place $destination): void
+    {
+        for ($i = 1; $i <= $entityCount; $i++) {
+            $this->createRecord(Entity::class, [
+                '_key'                 => $this->fixtureKey($seedId . '_entity_' . $i),
+                '_import_id'           => $this->fixtureKey($seedId . ':entity:' . $i),
+                'public_id'            => Entity::generatePublicId(),
+                'company_uuid'         => $company->uuid,
+                'payload_uuid'         => $payload->uuid,
+                'tracking_number_uuid' => $trackingNumber->uuid,
+                'destination_uuid'     => $destination?->uuid,
+                'internal_id'          => $this->identifierPrefix() . '-ENTITY-' . strtoupper($seedId) . '-' . $i,
+                'name'                 => $this->entityNameFor($seedId, $i),
+                'type'                 => 'parcel',
+                'description'          => $this->fixtureNote('item'),
+                'weight'               => 5 + $i,
+                'weight_unit'          => 'kg',
+                'length'               => 40,
+                'width'                => 30,
+                'height'               => 20,
+                'dimensions_unit'      => 'cm',
+                'currency'             => 'SGD',
+                'declared_value'       => 1000 + ($i * 100),
+                'meta'                 => $this->meta($seedId . '_entity_' . $i),
+            ], true);
+        }
+    }
+}

@@ -356,13 +356,24 @@ export async function waitForBoot(page, { timeout = 60_000 } = {}) {
 /**
  * Block until nothing on the page is still moving.
  *
- * Ordering matters: content first (the selector and row count the manifest declares), then
- * the entry's own interaction, then the asynchronous tails — fonts, images, and map tiles —
- * which only start once the content that references them exists.
+ * Ordering matters: the declared selector, then the entry's own interaction, THEN the row
+ * assertion (the interaction is often what produces the rows), then the asynchronous tails —
+ * fonts, images and map tiles — which only start once the content referencing them exists.
  */
 export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) {
     if (entry.waitFor) {
         await page.waitForSelector(entry.waitFor, { state: 'visible', timeout });
+    }
+
+    // Interact BEFORE asserting rows. The interaction is usually what produces the content the
+    // assertion is about — the orders index opens on the map view with its table hidden and
+    // unpopulated, so checking first reported "the fixture data is missing" about seven rows
+    // that were one click away from existing.
+    if (typeof entry.interact === 'function') {
+        await entry.interact(page);
+        if (entry.waitForAfterInteract) {
+            await page.waitForSelector(entry.waitForAfterInteract, { state: 'visible', timeout });
+        }
     }
 
     if (entry.expectRows) {
@@ -382,13 +393,6 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
                         'the fixture data is missing or the selector is stale'
                 );
             });
-    }
-
-    if (typeof entry.interact === 'function') {
-        await entry.interact(page);
-        if (entry.waitForAfterInteract) {
-            await page.waitForSelector(entry.waitForAfterInteract, { state: 'visible', timeout });
-        }
     }
 
     await page.evaluate(() => document.fonts?.ready).catch(() => {});
@@ -414,6 +418,14 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
  * cheap fix.
  */
 async function waitForTiles(page, { timeout = 45_000, sampleMs = 250 } = {}) {
+    // A page that renders no map has nothing to settle. Without this the loop waits the full
+    // timeout for a tile count that can never rise above zero and then fails with "map tiles
+    // did not settle" — which reads like a network problem and is actually a manifest entry
+    // claiming a map the page does not have. The Fleet-Ops scheduler is exactly that case on
+    // v0.7.57.
+    const hasMap = await page.evaluate(() => document.querySelectorAll('.leaflet-container').length > 0);
+    if (!hasMap) return;
+
     const deadline = Date.now() + timeout;
     let previous = -1;
 

@@ -4,6 +4,7 @@ namespace Database\Seeders\Showcase\Iam;
 
 use Database\Seeders\Showcase\Concerns\AnnouncesFixtures;
 use Database\Seeders\Showcase\Concerns\SeedsShowcaseData;
+use Database\Seeders\Showcase\Iam\Concerns\BelongsToIam;
 use Fleetbase\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -19,6 +20,7 @@ use Illuminate\Database\Seeder;
 class IamSeeder extends Seeder
 {
     use SeedsShowcaseData;
+    use BelongsToIam;
     use AnnouncesFixtures;
 
     public function run(): void

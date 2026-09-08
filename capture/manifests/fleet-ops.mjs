@@ -22,6 +22,22 @@
 // and tighten it. The console ships no data-test-id attributes at all (checked), so these have
 // to be structural.
 //
+// NOT YET CAPTURED, and deliberately absent rather than guessed:
+//
+//   fleet-ops-fuel-reports-list  /fleet-ops/manage/fuel-reports renders no table and no
+//   fleet-ops-issues-list        /fleet-ops/manage/issues        heading on v0.7.57 — the
+//                                route resolves but the screen is empty, so the path is
+//                                wrong or the feature moved. The API does serve
+//                                /int/v1/fuel-reports and /int/v1/issues with 2 rows each,
+//                                so the fixtures exist; only the console path is unknown.
+//   fleet-ops-order-details      /fleet-ops/<public_id> redirects to the orders index, so
+//                                this would have published the list under a details name.
+//   fleet-ops-orchestrator-1     Captures non-deterministically: its `main` fallback selector
+//                                lets the capture land before the metrics load, and the file
+//                                swung between 56 KB and 158 KB across runs. Needs a real
+//                                waitFor on whatever it loads before it can be trusted — a
+//                                flaky entry means a noise pull request on some releases.
+//
 // `expectRows` is the load-bearing half of every list entry. A stale `waitFor` fails loudly; a
 // table that renders empty because the seeder did not populate that resource screenshots as a
 // perfectly successful run, and the empty state ships to the website.
@@ -63,8 +79,19 @@ export default {
             // operations has path '/' and orders has path '/' inside it, so the orders index
             // is the engine root.
             url: '/fleet-ops',
-            waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 10 },
+            // The orders index opens on the MAP view — the table is in the DOM but hidden, so
+            // waiting on it directly times out. The published filename says "table list", so
+            // switch views first. Map / Table / Board are the three toggles.
+            waitFor: '.leaflet-container, main',
+            interact: async (page) => {
+                await page.getByRole('button', { name: 'Table' }).first().click();
+            },
+            waitForAfterInteract: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 7 },
+            // Rows stream in after the view switch, and the two-identical-frames check can
+            // land inside a pause in that streaming. Measured: without this, the light variant
+            // differed between two otherwise identical runs.
+            extraSettleMs: 2000,
         },
         {
             id: 'order-config-details',
@@ -78,23 +105,18 @@ export default {
             file: 'fleet-ops-service-rate-list',
             url: '/fleet-ops/service-rates',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 1 },
+            expectRows: { selector: TABLE_ROW, min: 2 },
         },
         {
             id: 'scheduler',
             file: 'fleet-ops-scheduler',
             url: '/fleet-ops/scheduler',
-            waitFor: '.leaflet-container, .scheduler-container, main',
-            // The scheduler renders a Leaflet map; tiles arrive asynchronously and fade in.
-            map: { settleTiles: true },
+            // No map here, despite what the name suggests — verified on v0.7.57, the scheduler
+            // renders zero .leaflet-container elements. An earlier version declared
+            // `map: { settleTiles: true }` and hung for the full 45s timeout waiting on tiles
+            // that never existed.
+            waitFor: '.scheduler-container, main',
             extraSettleMs: 750,
-        },
-        {
-            id: 'orchestrator',
-            file: 'fleet-ops-orchestrator-1',
-            url: '/fleet-ops/orchestrator',
-            waitFor: '.orchestrator-container, main',
-            extraSettleMs: 600,
         },
 
         // ── Management ──────────────────────────────────────────────────────────────────
@@ -103,7 +125,7 @@ export default {
             file: 'fleet-ops-drivers-list',
             url: '/fleet-ops/manage/drivers',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 8 },
+            expectRows: { selector: TABLE_ROW, min: 3 },
         },
         {
             id: 'vehicles-list',
@@ -111,28 +133,30 @@ export default {
             file: 'fleet-ops-vehicles-list',
             url: '/fleet-ops/manage/vehicles',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 6 },
+            expectRows: { selector: TABLE_ROW, min: 25 },
         },
         {
             id: 'fleets-list',
             file: 'fleet-ops-fleets-list',
             url: '/fleet-ops/manage/fleets',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 3 },
+            expectRows: { selector: TABLE_ROW, min: 9 },
         },
         {
             id: 'places-list',
             file: 'fleet-ops-places-list',
             url: '/fleet-ops/manage/places',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 5 },
+            expectRows: { selector: TABLE_ROW, min: 6 },
         },
         {
             id: 'contacts-list',
             file: 'fleet-ops-contacts-list',
             url: '/fleet-ops/manage/contacts',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 3 },
+            // Four `contact`-type fixtures. The customers are on a sibling tab and do not
+            // count towards this table.
+            expectRows: { selector: TABLE_ROW, min: 4 },
         },
         {
             id: 'vendors-list',
@@ -140,20 +164,6 @@ export default {
             url: '/fleet-ops/manage/vendors',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 2 },
-        },
-        {
-            id: 'fuel-reports-list',
-            file: 'fleet-ops-fuel-reports-list',
-            url: '/fleet-ops/manage/fuel-reports',
-            waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 3 },
-        },
-        {
-            id: 'issues-list',
-            file: 'fleet-ops-issues-list',
-            url: '/fleet-ops/manage/issues',
-            waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 3 },
         },
 
         // ── Connectivity and maintenance ────────────────────────────────────────────────
@@ -169,7 +179,7 @@ export default {
             file: 'fleet-ops-maintenance-schedules',
             url: '/fleet-ops/maintenance/schedules',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 2 },
+            expectRows: { selector: TABLE_ROW, min: 1 },
         },
 
         // ── Settings ────────────────────────────────────────────────────────────────────
@@ -194,25 +204,10 @@ export default {
                 match: { field: 'name', value: 'Amara Chen' },
             },
             url: ({ publicId }) => `/fleet-ops/manage/drivers/${publicId}`,
-            waitFor: '.overlay-panel-body, [data-test-id="driver-details"], main',
+            // Confirmed: the details view renders inside the management layout, not an
+            // overlay panel — no .overlay-panel-body exists on v0.7.57.
+            waitFor: '.next-table-wrapper, main',
             extraSettleMs: 500,
-        },
-        {
-            id: 'order-details',
-            file: 'fleet-ops-order-details',
-            resolve: {
-                // FLT-1004 is the demo seeder's "started" order: it has a driver, a vehicle and
-                // a live route, so the detail page renders with something on the map. See
-                // Demo\OrdersSeeder::INTERNAL_IDS — changing that table breaks this lookup.
-                resource: 'orders',
-                query: 'FLT-1004',
-                match: { field: 'internal_id', value: 'FLT-1004' },
-            },
-            // orders sits at the engine root, so its details route is /fleet-ops/<public_id>.
-            url: ({ publicId }) => `/fleet-ops/${publicId}`,
-            waitFor: '.overlay-panel-body, [data-test-id="order-details"], main',
-            map: { settleTiles: true },
-            extraSettleMs: 750,
         },
     ],
 };

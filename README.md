@@ -89,6 +89,7 @@ state".
 | `docker-compose.yml` | The stack. Every image pinned to `${RELEASE_TAG}`; nothing is built. |
 | `docker/caddy/Caddyfile` | The single-origin proxy and its ordered path map. |
 | `scripts/` | `up` → `provision` → `seed` → `capture`, plus `assert-routes` and `freeze-timestamps`. |
+| `seeders/*/Concerns/BelongsTo*.php` | Per-area seed tags. Areas share tables (users, most notably), so each tags its own rows or one area's purge deletes another's. |
 | `seeders/` | Bind-mounted into the running API container as `Database\Seeders\Showcase\`. |
 | `capture/` | The Playwright capture package and its manifests. |
 
@@ -114,7 +115,7 @@ wants anyway.
 | --- | --- | --- |
 | Organization | ✅ | — |
 | IAM | ✅ | ✅ 4 entries, captured |
-| Fleet-Ops | ⬜ | ✅ 18 entries |
+| Fleet-Ops | ✅ | ✅ 14 entries, captured |
 | General | ⬜ | ⬜ |
 | Developers | ⬜ | ⬜ |
 | Storefront | ⬜ | ⬜ |

@@ -61,6 +61,10 @@ for area in "${AREAS[@]}"; do
 
     echo
     echo "==> Capturing ${area}"
+    # Clear the area's output first. Without this, a file from an entry that has since been
+    # removed from the manifest survives in out/ and compare.mjs would happily stage it — the
+    # pull request then updates a screenshot nothing captures any more.
+    rm -rf "capture/out/${area}"
     # Exported rather than prefixed onto the command: BASE_URL and API_HOST are the same value
     # here (one origin serves both roles), and a `API_HOST="$BASE_URL"` prefix would expand
     # BASE_URL from the *outer* shell before the prefix assignment applied — correct today,

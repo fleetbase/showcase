@@ -41,13 +41,25 @@ docker compose exec -T application su www-data -s /bin/sh -c \
 
 echo "==> Seeding ${AREA} (${CLASS})"
 # --force because the container runs APP_ENV=production, where db:seed prompts otherwise.
+# The exit code is captured rather than swallowed with `|| true`. An earlier version discarded
+# it and only grepped for known strings, so a fatal SQLSTATE from inside a seeder printed a
+# stack trace and the script still finished with "✔ Seeded". A seed that half-ran is worse than
+# one that failed, because the capture then screenshots whatever did land.
+set +e
 OUT="$(docker compose exec -T \
     -e "SHOWCASE_IDENTITY=${SHOWCASE_IDENTITY:-demo@fleetbase.io}" \
     -e "SHOWCASE_PASSWORD=${SHOWCASE_PASSWORD}" \
     -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Demo}" \
-    application php artisan db:seed --force --class="${CLASS}" 2>&1 || true)"
+    application php artisan db:seed --force --class="${CLASS}" 2>&1)"
+STATUS=$?
+set -e
 
 printf '%s\n' "$OUT" | tail -30
+
+if [[ $STATUS -ne 0 ]]; then
+    echo "::error::db:seed exited ${STATUS} for ${CLASS}."
+    exit 1
+fi
 
 if printf '%s\n' "$OUT" | grep -qiE 'does not exist|Target class .* does not exist'; then
     echo "::error::Seeder class ${CLASS} was not found. If you just added the file, the bind mount"

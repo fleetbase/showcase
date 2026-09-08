@@ -3,6 +3,7 @@
 namespace Database\Seeders\Showcase\Iam;
 
 use Database\Seeders\Showcase\Concerns\SeedsShowcaseData;
+use Database\Seeders\Showcase\Iam\Concerns\BelongsToIam;
 use Fleetbase\Models\Company;
 use Fleetbase\Models\Group;
 use Fleetbase\Models\GroupUser;
@@ -18,6 +19,7 @@ use Illuminate\Support\Str;
 class GroupsSeeder extends Seeder
 {
     use SeedsShowcaseData;
+    use BelongsToIam;
 
     /** [name, description, [member seed ids]] */
     protected function groupFixtures(): array

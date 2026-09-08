@@ -3,6 +3,7 @@
 namespace Database\Seeders\Showcase\Iam;
 
 use Database\Seeders\Showcase\Concerns\SeedsShowcaseData;
+use Database\Seeders\Showcase\Iam\Concerns\BelongsToIam;
 use Fleetbase\Models\Company;
 use Fleetbase\Models\CompanyUser;
 use Fleetbase\Models\User;
@@ -24,6 +25,7 @@ use Illuminate\Database\Seeder;
 class UsersSeeder extends Seeder
 {
     use SeedsShowcaseData;
+    use BelongsToIam;
 
     /**
      * [name, email, phone, role, status].
