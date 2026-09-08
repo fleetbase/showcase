@@ -1,0 +1,102 @@
+# The single-origin front proxy.
+#
+# WHY THIS EXISTS AT ALL
+#
+# The published console image is built with ENVIRONMENT=production, so
+# console/environments/.env.production applies and API_HOST is empty. Verified by decoding
+# the compiled config out of the image itself:
+#
+#     API: { host: "", namespace: "int/v1" }
+#     disableRuntimeConfig: true
+#     socket: { path: "/socketcluster/", hostname: "", secure: true, port: "38000" }
+#
+# disableRuntimeConfig means the app never fetches /fleetbase.config.json — the image ships a
+# real one, and it is dead weight. There is no configuration path around this. Then
+# @fleetbase/ember-core/addon/services/fetch.js does:
+#
+#     if (isBlank(config.API.host)) {
+#         config.API.host = `${window.location.protocol}//${window.location.hostname}`;
+#     }
+#
+# — note it drops the PORT. So the API has to answer on the same origin on port 80. That is
+# not a workaround: it is the topology a real deployment uses, which makes these screenshots
+# more faithful, not less.
+{
+	admin off
+	# `disable_redirects`, not `off`. Plain `off` disables automatic HTTPS *entirely*,
+	# including certificate management — which would leave the `tls internal` listener below
+	# without a certificate. This keeps internal issuance working while making sure nothing
+	# ever redirects the :80 site to HTTPS, which would break every capture.
+	auto_https disable_redirects
+}
+
+:80 {
+	log
+
+	# ── API ────────────────────────────────────────────────────────────────────────────
+	#
+	# ORDER IS LOAD-BEARING, and the reason is not obvious: /storefront and /ledger are
+	# SIMULTANEOUSLY console engine mounts and API prefixes. Verified in each package's
+	# server/config/*.php — storefront.api.routing.prefix = 'storefront',
+	# ledger.api.routing.prefix = 'ledger' — while both are also package.json fleetbase.route
+	# values. So /storefront/int/v1/dashboard is the API and /storefront/products is the SPA.
+	#
+	# Getting this wrong does not look like an error. An unclaimed API path falls through to
+	# the console, which answers 200 text/html for anything, the app fails to parse JSON, and
+	# the screen renders as an empty table that screenshots perfectly. scripts/assert-routes.sh
+	# diffs this matcher against `artisan route:list` so a prefix added by a future release
+	# fails the run instead.
+	#
+	# A path matcher takes multiple arguments and ORs them; repeating `path` inside one named
+	# matcher is a Caddy config error.
+	# Dual-role prefixes — simultaneously an engine mount and an API prefix. Only the API
+	# sub-paths are claimed; the bare prefix stays with the console:
+	#   storefront, ledger, customer-portal, ai, valhalla, vroom
+	# API-only prefixes are claimed wholesale:
+	#   int, v1, ~registry, sanctum, health, storage, uploads, opcache-api, stripe, webhooks
+	#
+	# This list was discovered, not guessed. scripts/assert-routes.sh diffed the first draft
+	# against `php artisan route:list` on a real v0.7.57 stack and found valhalla, vroom,
+	# opcache-api, stripe and webhooks missing — five silent misroutes.
+	@api path /int/* /v1/* \
+ /storefront/int/* /storefront/v1/* \
+ /ledger/int/* /ledger/v1/* /ledger/public/* \
+ /customer-portal/int/* \
+ /ai/int/* \
+ /valhalla/int/* \
+ /vroom/int/* \
+ /~registry/* \
+ /sanctum/* \
+ /health \
+ /storage/* /uploads/* \
+ /opcache-api/* \
+ /stripe/* \
+ /webhooks/*
+	handle @api {
+		reverse_proxy application:8000
+	}
+
+	handle /socketcluster/* {
+		reverse_proxy socket:8000
+	}
+
+	# Everything else is the console SPA: /, /fleet-ops/*, /iam/*, /storefront/*, /ledger/*,
+	# /developers/*, /~/:slug, /install, /onboard, /auth/*, /join/*, /assets/*,
+	# /extensions.json.
+	handle {
+		reverse_proxy console:4200
+	}
+}
+
+# The console bakes SOCKETCLUSTER_SECURE=true and port 38000 with an empty hostname, which
+# socketcluster-client fills in from window.location. So it dials wss://<host>:38000/socketcluster/
+# and nothing short of rebuilding the image changes that. Terminating TLS here is far cheaper,
+# and it is what makes the realtime screens (developers-websockets*) capturable at all.
+#
+# `tls internal` issues from Caddy's local CA. The capture context sets ignoreHTTPSErrors,
+# which is safe precisely because this listener only ever fronts a container on a private
+# compose network.
+https://localhost:38000, https://proxy:38000 {
+	tls internal
+	reverse_proxy socket:8000
+}

@@ -1,0 +1,146 @@
+# The showcase stack: a Fleetbase release, booted from PUBLISHED images.
+#
+# Nothing here is built. Every Fleetbase image is pinned to ${RELEASE_TAG}, which is the
+# whole point — the screenshots have to show the artifact customers actually deploy, and
+# building from source would show something subtly different (and cost 30 minutes).
+#
+# ${RELEASE_TAG:?} rather than a default: a missing tag is a compose parse error instead of
+# a silent pull of :latest, which would screenshot a different build than the pull request
+# title claims. scripts/up.sh writes it into ./.env, which Compose loads automatically.
+
+name: fleetbase-showcase
+
+x-api: &api
+  image: fleetbase/fleetbase-api:${RELEASE_TAG:?set RELEASE_TAG, e.g. v0.7.57}
+  restart: unless-stopped
+  depends_on:
+    database: { condition: service_healthy }
+    cache: { condition: service_healthy }
+
+# Everything the API needs, in one place. Deliberately NOT an api/.env file: deploy.sh ends
+# with `config:cache`, and Laravel skips LoadEnvironmentVariables entirely when the config is
+# cached — so a mounted .env would be read during provisioning and then silently stop being
+# read, which is the worst of both worlds. Compose environment is baked into the process.
+x-api-env: &api-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY:?run scripts/up.sh, which generates one}
+  # Must match the origin the proxy serves. Storage URLs and mail links are built from it.
+  APP_URL: http://localhost
+  CONSOLE_HOST: http://localhost
+  DATABASE_URL: mysql://root@database/fleetbase
+  QUEUE_CONNECTION: redis
+  CACHE_DRIVER: redis
+  CACHE_PATH: /fleetbase/api/storage/framework/cache
+  CACHE_URL: tcp://cache
+  REDIS_URL: tcp://cache
+  BROADCAST_DRIVER: socketcluster
+  SOCKETCLUSTER_HOST: socket
+  SOCKETCLUSTER_PORT: 8000
+  SESSION_DOMAIN: localhost
+  MAIL_MAILER: log
+  LOG_CHANNEL: stderr
+  REGISTRY_HOST: https://registry.fleetbase.io
+  REGISTRY_PREINSTALLED_EXTENSIONS: "true"
+  OSRM_HOST: https://router.project-osrm.org
+
+services:
+  # ── The single origin ────────────────────────────────────────────────────────────────
+  # See docker/caddy/Caddyfile for why this exists at all. Short version: the published
+  # console resolves its API host from window.location and drops the port, so the console
+  # and the API must answer on the same origin on port 80.
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      # The console dials wss://<host>:38000 — the port is compiled into the image, so the
+      # realtime screens can only be captured when the host really does publish 38000.
+      # It is a variable purely so a developer whose local Fleetbase dev stack already owns
+      # that port can remap it and still capture everything else; CI always uses the default.
+      - "${WSS_PORT:-38000}:38000"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - console
+      - application
+
+  console:
+    image: fleetbase/fleetbase-console:${RELEASE_TAG:?set RELEASE_TAG, e.g. v0.7.57}
+    # Published amd64-only, unlike fleetbase-api which is genuinely multi-arch. Explicit so
+    # Apple silicon emulates instead of failing the pull with "no matching manifest".
+    platform: linux/amd64
+    restart: unless-stopped
+    # No port mapping and no config bind-mount. The image ships a fleetbase.config.json, but
+    # a production build never fetches it (disableRuntimeConfig is true), so mounting one
+    # over it does nothing. Only the proxy reaches this service.
+
+  application:
+    <<: *api
+    environment: *api-env
+    volumes:
+      # The seeders. Lands inside the image's own Database\Seeders\ PSR-4 prefix, so no
+      # autoload surgery — and a bind mount rather than a copy means editing a seeder is a
+      # file save, not a re-tar and re-dump. See seeders/README.md.
+      - ./seeders:/fleetbase/api/database/seeders/Showcase:ro
+      - api-storage:/fleetbase/api/storage/app
+
+  # The API image carries a HEALTHCHECK that probes its HTTP server. These two containers
+  # replace the entrypoint with a worker and never listen, so the inherited check can only
+  # ever fail — and `up --wait` would abort on it. Disable rather than invent a new probe:
+  # if the queue dies, provisioning fails on its own with a far more legible error.
+  queue:
+    <<: *api
+    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=120"]
+    environment: *api-env
+    healthcheck:
+      disable: true
+
+  scheduler:
+    <<: *api
+    command: ["go-crond", "--verbose", "root:./crontab"]
+    environment: *api-env
+    healthcheck:
+      disable: true
+
+  socket:
+    image: socketcluster/socketcluster:v17.4.0
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      SOCKETCLUSTER_WORKERS: 2
+      SOCKETCLUSTER_BROKERS: 2
+      # The console dials from http://localhost; anything stricter drops the connection and
+      # the realtime screens render empty.
+      SOCKETCLUSTER_OPTIONS: '{"origins":"*:*"}'
+
+  cache:
+    image: redis:4-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  database:
+    image: mysql:8.0-oracle
+    restart: unless-stopped
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: fleetbase
+    # A named volume, not the monorepo's committed docker/database/mysql datadir. Every run
+    # starts from an empty database, which is what makes the seed reproducible.
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db-data:
+  api-storage:
+  caddy-data:

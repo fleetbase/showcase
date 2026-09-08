@@ -1,0 +1,7 @@
+# Written by scripts/up.sh; carries the release tag, APP_KEY and local port overrides.
+.env
+.seeded-fixtures.json
+
+capture/node_modules/
+capture/out/
+capture/.cache/
