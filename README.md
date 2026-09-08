@@ -46,7 +46,7 @@ the token already in hand. A login performed *inside* the capture writes `last_l
 the IAM users screen renders — so the file would differ on every run. Measured: with the login
 inside, 6 of 8 files were byte-identical across two runs; with this ordering, 8 of 8 are.
 
-## The three things that will surprise you
+## The four things that will surprise you
 
 **1. Everything is on port 80, and that is not negotiable.** The published console image is
 built `ENVIRONMENT=production`, so `API_HOST` is empty and `disableRuntimeConfig` is true — it
@@ -88,7 +88,7 @@ state".
 | --- | --- |
 | `docker-compose.yml` | The stack. Every image pinned to `${RELEASE_TAG}`; nothing is built. |
 | `docker/caddy/Caddyfile` | The single-origin proxy and its ordered path map. |
-| `scripts/` | `up` → `provision` → `seed`, plus `assert-routes`. |
+| `scripts/` | `up` → `provision` → `seed` → `capture`, plus `assert-routes` and `freeze-timestamps`. |
 | `seeders/` | Bind-mounted into the running API container as `Database\Seeders\Showcase\`. |
 | `capture/` | The Playwright capture package and its manifests. |
 
