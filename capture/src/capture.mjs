@@ -23,6 +23,11 @@ import { pngToWebp } from './encode.mjs';
  * site's source is a literal string like '/images/screenshots/fleet-ops/x.webp'. Suffixing
  * dark would rename all of them and break every page that renders one.
  */
+// Generous on purpose, and overridable: a natively-running browser needs a fraction of this,
+// but the same code runs against an emulated amd64 Chromium on Apple silicon where boot is an
+// order of magnitude slower.
+const NAV_TIMEOUT = Number(process.env.CAPTURE_NAV_TIMEOUT_MS ?? 120_000);
+
 export function fileNameFor(manifest, entry, theme) {
     return theme === manifest.defaultTheme ? `${entry.file}.webp` : `${entry.file}-${theme}.webp`;
 }
@@ -70,6 +75,7 @@ export async function captureAll({
     baseUrl,
     apiHost,
     token,
+    userId,
     tileCache,
     outDir,
     log = () => {},
@@ -83,7 +89,7 @@ export async function captureAll({
         const context = await browser.newContext(
             contextOptions({ viewport: manifest.viewport, theme })
         );
-        await applyInitScripts(context, { token, theme, apiHost });
+        await applyInitScripts(context, { token, theme, apiHost, userId });
 
         const page = await context.newPage();
         await installRoutes(page, {
@@ -97,7 +103,12 @@ export async function captureAll({
         // extension manager's lazy engine load, settles the session, and gives ensureTheme
         // a booted app to verify against — so a theme problem surfaces once here rather
         // than as sixteen wrong-theme screenshots.
-        await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
+        // NAV_TIMEOUT, not Playwright's 30s default. The first navigation is the slowest of
+        // the run — it boots the Ember app, resolves the session and lazy-loads the engine —
+        // and on an emulated amd64 browser it does not finish in 30s. Leaving it at the
+        // default made the whole run fail on its very first goto while every later navigation
+        // had 45s.
+        await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
         await waitForBoot(page);
         const themeResult = await ensureTheme(page, theme);
         log(`theme "${theme}" active${themeResult.repaired ? ' (repaired via persisted option)' : ''}`);
@@ -108,7 +119,7 @@ export async function captureAll({
 
             if (entry.viewport) await page.setViewportSize(entry.viewport);
 
-            await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded' });
+            await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
             await waitForBoot(page);
             await waitForQuiescence(page, entry);
 

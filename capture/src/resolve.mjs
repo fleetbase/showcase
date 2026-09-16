@@ -52,9 +52,19 @@ async function getRows(url, headers) {
         throw new Error(`${response.status} ${response.statusText} for ${url}`);
     }
     const body = await response.json();
-    // Internal endpoints answer either a bare array or a JSON:API-ish { data: [...] }.
-    const rows = Array.isArray(body) ? body : (body?.data ?? []);
-    return Array.isArray(rows) ? rows : [];
+
+    // Three envelopes, in order of specificity.
+    //
+    // The third is the one that actually matters and is easy to miss: Fleetbase's internal
+    // index endpoints key the collection by RESOURCE NAME, not `data` — GET /int/v1/drivers
+    // answers `{"drivers": [...]}`. Assuming `data` returns an empty array, which the caller
+    // then reports as "expected exactly 1 record, got 0. Checked 0 records" — a message that
+    // reads like missing fixtures when the fixtures are fine.
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body?.data)) return body.data;
+
+    const collection = Object.values(body ?? {}).find((value) => Array.isArray(value));
+    return collection ?? [];
 }
 
 /**

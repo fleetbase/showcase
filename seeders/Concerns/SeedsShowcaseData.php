@@ -2,10 +2,7 @@
 
 namespace Database\Seeders\Showcase\Concerns;
 
-use Fleetbase\LaravelMysqlSpatial\Types\LineString;
-use Fleetbase\LaravelMysqlSpatial\Types\MultiPolygon;
 use Fleetbase\LaravelMysqlSpatial\Types\Point;
-use Fleetbase\LaravelMysqlSpatial\Types\Polygon;
 use Fleetbase\Models\Company;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -48,8 +45,15 @@ trait SeedsShowcaseData
      */
     protected function seedName(): string
     {
-        return 'showcase';
+        // method_exists rather than declaring seedArea() here with a null default, because two
+        // traits composed into the same class cannot both declare the same method — PHP calls
+        // it a collision and refuses, and every area seeder composes this trait alongside its
+        // own. Leaving the method undeclared here lets an area trait supply it cleanly.
+        $area = method_exists($this, 'seedArea') ? $this->seedArea() : null;
+
+        return $area ? 'showcase-' . $area : 'showcase';
     }
+
 
     /**
      * Note and description text. Unlike the fleetops testing fixtures — which deliberately
@@ -59,6 +63,26 @@ trait SeedsShowcaseData
     protected function fixtureNote(string $noun): string
     {
         return ucfirst($noun) . '.';
+    }
+
+    /**
+     * Human-readable phrase for the odd note that does not fit fixtureNote()'s noun shape.
+     * Kept separate from seedName() because one is infrastructure and never rendered, while
+     * this appears on screen.
+     */
+    protected function seedLabel(): string
+    {
+        return 'Fleetbase demo';
+    }
+
+    /**
+     * Prefix for human-facing identifiers — internal_id, tracking numbers, work order ids.
+     * FLT rather than upstream's TEST, because these are read by people looking at the
+     * marketing site.
+     */
+    protected function identifierPrefix(): string
+    {
+        return 'FLT';
     }
 
     /**
@@ -129,21 +153,50 @@ trait SeedsShowcaseData
         return new Point($lat, $lng);
     }
 
-    protected function polygon(array $coordinates): Polygon
+    /**
+     * Close a ring and flip it into GeoJSON's axis order.
+     *
+     * Fixtures are written [lat, lng] — the order every Fleetbase seeder and the Point
+     * constructor use. GeoJSON is [lng, lat]. Getting this backwards puts Singapore in the
+     * Indian Ocean, and the screenshot still renders, so it is worth doing in exactly one place.
+     */
+    private function geoJsonRing(array $coordinates): array
     {
-        $points = array_map(fn (array $coordinate) => $this->point($coordinate[0], $coordinate[1]), $coordinates);
+        $ring = array_map(fn (array $coordinate) => [$coordinate[1], $coordinate[0]], $coordinates);
 
-        // A polygon ring has to close. Callers write the corners and forget the repeat.
-        if ($points[0]->getLat() !== end($points)->getLat() || $points[0]->getLng() !== end($points)->getLng()) {
-            $points[] = $points[0];
+        // A ring has to close. Callers write the corners and forget the repeat.
+        if ($ring[0] !== end($ring)) {
+            $ring[] = $ring[0];
         }
 
-        return new Polygon([new LineString($points)]);
+        return $ring;
     }
 
-    protected function multiPolygon(array $coordinates): MultiPolygon
+    /**
+     * GeoJSON rather than a spatial Polygon object, and that is a compatibility fix.
+     *
+     * On fleetops v0.7.57, Zone::$border casts through Fleetbase\FleetOps\Casts\Polygon, and
+     * handing it a LaravelMysqlSpatial\Types\Polygon fails at insert with
+     *
+     *     SQLSTATE[22003]: Cannot get geometry object from data you send to the GEOMETRY field
+     *
+     * because the value reaches MySQL as `(103.8 1.2,...)` — the ring without its POLYGON()
+     * wrapper. Verified it is not a forceFill artefact: Zone::create() with a Polygon object
+     * fails identically. The cast's GeoJSON branch works for both Zone and ServiceArea, so
+     * everything goes through it.
+     *
+     * Upstream's Testing seeders pass objects and presumably work on the fleetops version they
+     * ship with; showcase runs against whatever the newest release publishes, which is exactly
+     * the kind of drift this repo has to absorb.
+     */
+    protected function polygon(array $coordinates): array
     {
-        return new MultiPolygon([$this->polygon($coordinates)]);
+        return ['type' => 'Polygon', 'coordinates' => [$this->geoJsonRing($coordinates)]];
+    }
+
+    protected function multiPolygon(array $coordinates): array
+    {
+        return ['type' => 'MultiPolygon', 'coordinates' => [[$this->geoJsonRing($coordinates)]]];
     }
 
     // ── Writing ─────────────────────────────────────────────────────────────────────────

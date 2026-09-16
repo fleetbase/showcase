@@ -116,7 +116,7 @@ input, textarea { caret-color: transparent !important; }
  * All of it goes through addInitScript so it survives the in-app reloads and redirects
  * (/login -> /onboard -> /) that the console performs during boot.
  */
-export async function applyInitScripts(context, { token, theme, apiHost }) {
+export async function applyInitScripts(context, { token, theme, apiHost, userId }) {
     // ember-simple-auth's adaptive store reads this key on boot. The shape is the login
     // response body with the authenticator name injected — see the precedent test at
     // console/tests/unit/models/report-test.js:414. The token must be a genuine Sanctum
@@ -126,10 +126,21 @@ export async function applyInitScripts(context, { token, theme, apiHost }) {
         authenticated: { authenticator: 'authenticator:fleetbase', token, type: 'user' },
     });
 
-    // currentUser.id is 'anon' until the user model resolves, and the theme service reads
-    // the option during ApplicationRoute.activate() — i.e. possibly while still anon. This
-    // covers the pre-user window; ensureTheme() covers the post-user one.
-    const userOptions = JSON.stringify({ 'anon:theme': theme });
+    // THE THEME. Playwright's `colorScheme` is NOT sufficient, and this is not obvious.
+    //
+    // The theme service resolves in this order: persisted user option -> initialTheme ->
+    // prefers-color-scheme -> 'dark'. But the server also serves a brand default
+    // (GET int/v1/settings/branding -> brand.default_theme, which ships as "dark"), and the
+    // console applies it — so on a stock install `prefers-color-scheme: light` is simply
+    // ignored and every capture comes out dark. Verified: emulating light and dark both
+    // produced body[data-theme="dark"].
+    //
+    // The persisted option is the one lever that wins. Keys are `<user uuid>:theme`, so the
+    // uuid has to be known before boot, which is why bin/capture.mjs fetches it from
+    // auth/session up front. `anon:theme` covers the window before the user model resolves.
+    const options = { 'anon:theme': theme };
+    if (userId) options[`${userId}:theme`] = theme;
+    const userOptions = JSON.stringify(options);
 
     await context.addInitScript(
         ({ session, userOptions, styles }) => {
@@ -345,13 +356,24 @@ export async function waitForBoot(page, { timeout = 60_000 } = {}) {
 /**
  * Block until nothing on the page is still moving.
  *
- * Ordering matters: content first (the selector and row count the manifest declares), then
- * the entry's own interaction, then the asynchronous tails — fonts, images, and map tiles —
- * which only start once the content that references them exists.
+ * Ordering matters: the declared selector, then the entry's own interaction, THEN the row
+ * assertion (the interaction is often what produces the rows), then the asynchronous tails —
+ * fonts, images and map tiles — which only start once the content referencing them exists.
  */
 export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) {
     if (entry.waitFor) {
         await page.waitForSelector(entry.waitFor, { state: 'visible', timeout });
+    }
+
+    // Interact BEFORE asserting rows. The interaction is usually what produces the content the
+    // assertion is about — the orders index opens on the map view with its table hidden and
+    // unpopulated, so checking first reported "the fixture data is missing" about seven rows
+    // that were one click away from existing.
+    if (typeof entry.interact === 'function') {
+        await entry.interact(page);
+        if (entry.waitForAfterInteract) {
+            await page.waitForSelector(entry.waitForAfterInteract, { state: 'visible', timeout });
+        }
     }
 
     if (entry.expectRows) {
@@ -371,13 +393,6 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
                         'the fixture data is missing or the selector is stale'
                 );
             });
-    }
-
-    if (typeof entry.interact === 'function') {
-        await entry.interact(page);
-        if (entry.waitForAfterInteract) {
-            await page.waitForSelector(entry.waitForAfterInteract, { state: 'visible', timeout });
-        }
     }
 
     await page.evaluate(() => document.fonts?.ready).catch(() => {});
@@ -403,6 +418,14 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
  * cheap fix.
  */
 async function waitForTiles(page, { timeout = 45_000, sampleMs = 250 } = {}) {
+    // A page that renders no map has nothing to settle. Without this the loop waits the full
+    // timeout for a tile count that can never rise above zero and then fails with "map tiles
+    // did not settle" — which reads like a network problem and is actually a manifest entry
+    // claiming a map the page does not have. The Fleet-Ops scheduler is exactly that case on
+    // v0.7.57.
+    const hasMap = await page.evaluate(() => document.querySelectorAll('.leaflet-container').length > 0);
+    if (!hasMap) return;
+
     const deadline = Date.now() + timeout;
     let previous = -1;
 

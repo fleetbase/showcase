@@ -41,13 +41,25 @@ docker compose exec -T application su www-data -s /bin/sh -c \
 
 echo "==> Seeding ${AREA} (${CLASS})"
 # --force because the container runs APP_ENV=production, where db:seed prompts otherwise.
+# The exit code is captured rather than swallowed with `|| true`. An earlier version discarded
+# it and only grepped for known strings, so a fatal SQLSTATE from inside a seeder printed a
+# stack trace and the script still finished with "✔ Seeded". A seed that half-ran is worse than
+# one that failed, because the capture then screenshots whatever did land.
+set +e
 OUT="$(docker compose exec -T \
     -e "SHOWCASE_IDENTITY=${SHOWCASE_IDENTITY:-demo@fleetbase.io}" \
     -e "SHOWCASE_PASSWORD=${SHOWCASE_PASSWORD}" \
     -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Demo}" \
-    application php artisan db:seed --force --class="${CLASS}" 2>&1 || true)"
+    application php artisan db:seed --force --class="${CLASS}" 2>&1)"
+STATUS=$?
+set -e
 
 printf '%s\n' "$OUT" | tail -30
+
+if [[ $STATUS -ne 0 ]]; then
+    echo "::error::db:seed exited ${STATUS} for ${CLASS}."
+    exit 1
+fi
 
 if printf '%s\n' "$OUT" | grep -qiE 'does not exist|Target class .* does not exist'; then
     echo "::error::Seeder class ${CLASS} was not found. If you just added the file, the bind mount"
@@ -62,10 +74,23 @@ fi
 # Echoed by the area seeders so the capture step can cross-check the records it resolved
 # against the ones the seeder says it made. Two independent paths agreeing is what separates
 # "resolved the right record" from "resolved a record".
-FIXTURES="$(printf '%s\n' "$OUT" | grep -oE 'SEEDED_FIXTURES=\{.*\}' | tail -1 | cut -d= -f2- || true)"
-if [[ -n "$FIXTURES" ]]; then
-    echo "$FIXTURES" > .seeded-fixtures.json
-    echo "  ✔ wrote .seeded-fixtures.json"
+#
+# MERGED, not overwritten. A full seed prints one SEEDED_FIXTURES line per area, and an earlier
+# version kept only the last — which worked solely because Fleet-Ops happens to seed last. And a
+# single-area reseed must not throw away the ids of areas it did not touch, which are still valid.
+# A fresh database starts from an empty file: provision.sh removes it.
+FIXTURE_LINES="$(printf '%s\n' "$OUT" | grep -oE 'SEEDED_FIXTURES=\{.*\}' | cut -d= -f2- || true)"
+if [[ -n "$FIXTURE_LINES" ]]; then
+    FIXTURE_LINES="$FIXTURE_LINES" python3 - <<'PY'
+import json, os, pathlib
+path = pathlib.Path('.seeded-fixtures.json')
+merged = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+for line in os.environ['FIXTURE_LINES'].splitlines():
+    if line.strip():
+        merged.update(json.loads(line))
+path.write_text(json.dumps(merged, sort_keys=True) + '\n')
+print(f'  ✔ .seeded-fixtures.json now holds {len(merged)} id(s)')
+PY
 fi
 
 echo
