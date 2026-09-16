@@ -19,6 +19,15 @@ cd "$(dirname "$0")/.."
 
 compose() { docker compose "$@"; }
 
+# The fixture ids recorded by a previous seed belong to a database this one may have replaced.
+# Left in place they fail the capture's cross-check with "resolved ids disagree with
+# SEEDED_FIXTURES" — correct, but it reads like a seeder bug when the file is simply stale.
+rm -f .seeded-fixtures.json
+
+# deploy.sh is slow and that is normal. On v0.7.59 PermissionSeeder alone takes ~9 minutes
+# (537s measured), so do not wrap this in a short timeout — an earlier run did, killed it inside
+# PermissionSeeder, and the rest of deploy.sh (create-permissions, the caches, registry:init)
+# silently never ran.
 echo "==> Running deploy.sh inside the application container"
 compose exec -T application bash -c "./deploy.sh"
 

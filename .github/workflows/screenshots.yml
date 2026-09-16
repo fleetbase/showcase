@@ -1,0 +1,177 @@
+name: Console Screenshots
+
+# Boots a Fleetbase release from the PUBLISHED Docker images, seeds the showcase fixtures,
+# captures the console, and uploads the screenshots as an artifact for review.
+#
+# Run it by hand from the Actions tab (Run workflow). Opening a pull request on fleetbase.io is
+# opt-in — leave `open_pr` false and the run only produces an artifact, which is what you want
+# while iterating on fixtures and manifests.
+#
+# `repository_dispatch` is wired up so the monorepo can trigger this after it publishes images,
+# but nothing sends that event yet; the sender job in fleetbase/fleetbase is still to be written.
+#
+# SETUP
+#   Secret SHOWCASE_PASSWORD  — the seeded demo account's password. Any strong value; it only
+#                               ever exists inside a throwaway stack.
+#   Secret FLEETBASE_IO_TOKEN — only needed when open_pr is true. Fine-grained PAT scoped to
+#                               fleetbase/fleetbase.io with Contents and Pull requests
+#                               read/write, and nothing else.
+#
+# WHY IT TAKES SO LONG. deploy.sh's PermissionSeeder alone runs ~9 minutes, before any capture
+# happens. The timeout below allows for that; do not tighten it without measuring.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Fleetbase release to screenshot, e.g. v0.7.59'
+        required: true
+        default: 'v0.7.59'
+      areas:
+        description: 'Space-separated manifests to capture'
+        required: true
+        default: 'iam fleet-ops'
+      open_pr:
+        description: 'Also open a pull request on fleetbase.io (needs FLEETBASE_IO_TOKEN)'
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [fleetbase-release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    name: Capture console screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve inputs
+        id: cfg
+        env:
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.release_tag }}"
+          # A release-triggered run carries the tag in the dispatch payload instead.
+          [[ -z "$TAG" ]] && TAG="$DISPATCH_TAG"
+          if [[ -z "$TAG" ]]; then
+            echo "::error::No release tag supplied by the input or the dispatch payload."
+            exit 1
+          fi
+          AREAS="${{ inputs.areas }}"
+          [[ -z "$AREAS" ]] && AREAS="iam fleet-ops"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "areas=$AREAS" >> "$GITHUB_OUTPUT"
+          echo "Capturing $AREAS from $TAG"
+
+      - name: Require SHOWCASE_PASSWORD
+        run: |
+          if [[ -z "${{ secrets.SHOWCASE_PASSWORD }}" ]]; then
+            echo "::error::SHOWCASE_PASSWORD is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      # Every Fleetbase image is pulled, never built — that is the point of screenshotting a
+      # release rather than a branch. scripts/up.sh writes .env and waits on the healthchecks.
+      - name: Start the stack
+        env:
+          RELEASE_TAG: ${{ steps.cfg.outputs.tag }}
+        run: ./scripts/up.sh
+
+      - name: Provision
+        run: ./scripts/provision.sh
+
+      - name: Seed fixtures
+        env:
+          SHOWCASE_PASSWORD: ${{ secrets.SHOWCASE_PASSWORD }}
+        run: ./scripts/seed.sh
+
+      # capture.sh runs Chromium inside the pinned Playwright image on the compose network, the
+      # same way it does locally. That is what keeps a screenshot taken on a laptop comparable
+      # to one taken here — see the header of scripts/capture.sh.
+      - name: Capture
+        env:
+          SHOWCASE_PASSWORD: ${{ secrets.SHOWCASE_PASSWORD }}
+        run: ./scripts/capture.sh ${{ steps.cfg.outputs.areas }}
+
+      # Unconditional: when a run fails partway, the screenshots it did manage are the fastest
+      # way to see how far it got and what the failing screen looked like.
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-screenshots-${{ steps.cfg.outputs.tag }}
+          path: capture/out
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --no-color --tail=200 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true
+
+      # ── Optional: propose the changes on fleetbase.io ────────────────────────────────────
+      - name: Checkout fleetbase.io
+        if: ${{ inputs.open_pr }}
+        uses: actions/checkout@v4
+        with:
+          repository: fleetbase/fleetbase.io
+          token: ${{ secrets.FLEETBASE_IO_TOKEN }}
+          path: fleetbase-io
+
+      - name: Compare against the published library
+        if: ${{ inputs.open_pr }}
+        id: compare
+        run: |
+          set -euo pipefail
+          total=0
+          for area in ${{ steps.cfg.outputs.areas }}; do
+            echo "::group::$area"
+            node capture/bin/compare.mjs \
+              --new "capture/out/$area" \
+              --current "fleetbase-io/public/images/screenshots/$area" \
+              --staged "fleetbase-io/public/images/screenshots/$area" \
+              --report "capture/out/$area/report.json"
+            echo "::endgroup::"
+          done
+          cd fleetbase-io
+          total="$(git status --porcelain public/images/screenshots | wc -l | tr -d ' ')"
+          echo "changed=$total" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: ${{ inputs.open_pr && steps.compare.outputs.changed != '0' }}
+        uses: peter-evans/create-pull-request@v8
+        with:
+          path: fleetbase-io
+          token: ${{ secrets.FLEETBASE_IO_TOKEN }}
+          base: main
+          branch: automation/console-screenshots/${{ steps.cfg.outputs.tag }}
+          delete-branch: true
+          add-paths: public/images/screenshots/**
+          commit-message: 'Refresh console screenshots for ${{ steps.cfg.outputs.tag }}'
+          title: 'Refresh console screenshots for ${{ steps.cfg.outputs.tag }}'
+          labels: automated
+          body: |
+            Captured from `${{ steps.cfg.outputs.tag }}` by
+            [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            Areas: `${{ steps.cfg.outputs.areas }}`.
+
+            Review these on the Vercel preview rather than in the binary diff. Files without a
+            suffix are dark, matching the existing library; `-light.webp` files are new and
+            nothing on the site consumes them yet.

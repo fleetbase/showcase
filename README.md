@@ -21,7 +21,7 @@ fleetbase/fleetbase  v0.7.58 tag
 ## Quick start
 
 ```bash
-RELEASE_TAG=v0.7.57 ./scripts/up.sh
+RELEASE_TAG=v0.7.59 ./scripts/up.sh
 ```
 
 ```bash
@@ -45,6 +45,20 @@ enforces an ordering that matters: authenticate → freeze server-side timestamp
 the token already in hand. A login performed *inside* the capture writes `last_login`, which
 the IAM users screen renders — so the file would differ on every run. Measured: with the login
 inside, 6 of 8 files were byte-identical across two runs; with this ordering, 8 of 8 are.
+
+## Running it from GitHub
+
+The usual way to get screenshots is the **Console Screenshots** workflow — Actions → Run
+workflow. Give it a release tag and the areas to capture; it uploads the results as an artifact.
+Opening a pull request on fleetbase.io is opt-in via `open_pr`, so a plain run only produces
+images to look at.
+
+It needs one secret, `SHOWCASE_PASSWORD` (plus `FLEETBASE_IO_TOKEN` if you turn `open_pr` on).
+A run takes well over half an hour, most of it in `deploy.sh` — `PermissionSeeder` alone is
+about nine minutes before any browser starts.
+
+Prefer the workflow over a local run for anything you intend to publish. It is amd64 natively,
+whereas the console image is amd64-only and runs under slow emulation on Apple silicon.
 
 ## The four things that will surprise you
 
@@ -128,7 +142,13 @@ and FreeType rasterise glyphs differently, so every file would read as changed. 
 comparable run, execute the capture inside `mcr.microsoft.com/playwright:v1.62.1-noble`.
 
 The console image is published **amd64-only** (the API is multi-arch), so it runs under
-emulation on Apple silicon.
+emulation on Apple silicon — slowly enough that the browser can exceed Playwright's default
+30-second navigation timeout. `CAPTURE_NAV_TIMEOUT_MS` raises it; the default here is already
+120s for that reason. If a local capture is painful, run the workflow instead.
+
+The capture package needs **Node 22** (`engines` says so). Node 18 cannot expand the glob in the
+test script and cannot load the bundled sharp binary, and the failure looks like missing test
+files rather than a wrong runtime.
 
 If your own Fleetbase dev stack already owns port 38000, set `WSS_PORT` to something else. You
 lose the realtime screens — the console has `38000` compiled in — but everything else captures.
