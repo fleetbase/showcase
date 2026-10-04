@@ -110,7 +110,7 @@ trait SeedsShowcaseData
 
     protected function organizationName(): string
     {
-        return getenv('SHOWCASE_ORG_NAME') ?: 'Fleetbase Demo';
+        return getenv('SHOWCASE_ORG_NAME') ?: 'Fleetbase Pte Ltd';
     }
 
     protected function prepareCompany(): ?Company

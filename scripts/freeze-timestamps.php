@@ -27,7 +27,7 @@ try {
 
     // Every user in the showcase organization, seeded or not — the owner is the one that most
     // needs it and is the one the seeder does not create through createRecord().
-    $company = \Fleetbase\Models\Company::where('name', getenv('SHOWCASE_ORG_NAME') ?: 'Fleetbase Demo')->first();
+    $company = \Fleetbase\Models\Company::where('name', getenv('SHOWCASE_ORG_NAME') ?: 'Fleetbase Pte Ltd')->first();
 
     if (!$company) {
         echo PHP_EOL . 'FREEZE_ERROR=no showcase company found' . PHP_EOL;

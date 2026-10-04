@@ -250,7 +250,10 @@ async function avatarFor(url) {
         try {
             const body = await readFile(path.join(FIXTURES, 'avatars', candidate));
             const contentType = CONTENT_TYPES[path.extname(candidate).toLowerCase()] ?? 'application/octet-stream';
-            return { body, contentType };
+            // `fallback` is reported by installRoutes. A silent fallback is how the Fleetbase
+            // logo vanished from every screenshot: fleetbase-icon.png was not in fixtures,
+            // the generic placeholder went out in its place, and nothing said so.
+            return { body, contentType, fallback: candidate !== name };
         } catch {
             /* try the next candidate */
         }
@@ -274,7 +277,10 @@ export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlock
 
         if (AVATAR_PATTERN.test(url)) {
             const asset = await avatarFor(url);
-            if (asset) return route.fulfill({ status: 200, contentType: asset.contentType, body: asset.body });
+            if (asset) {
+                if (asset.fallback) onBlocked?.(url, 'served the generic placeholder — add this file to fixtures/avatars');
+                return route.fulfill({ status: 200, contentType: asset.contentType, body: asset.body });
+            }
             onBlocked?.(url, 'no avatar fixture');
             return route.abort();
         }
