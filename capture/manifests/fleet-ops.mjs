@@ -78,9 +78,15 @@ export default {
             id: 'live-orders-panel',
             file: 'fleet-ops-live-orders-panel',
             // The orders index opens on the Map view: a Leaflet map with the active orders
-            // listed in the side panel. No interaction needed — this is the default.
+            // listed in the side panel. The panel is NOT open by default — its state lives in
+            // the app-cache localStorage bucket, which the capture wipes on every boot for
+            // determinism — so open it from the toolbar the way an operator does.
             url: '/fleet-ops',
             waitFor: '.leaflet-container',
+            interact: async (page) => {
+                await page.locator('#map-toolbar-view-orders-button').click();
+            },
+            waitForAfterInteract: '.orders-panel.is-open',
             map: { settleTiles: true },
             extraSettleMs: 2500,
         },
@@ -92,10 +98,18 @@ export default {
             // Board view groups orders by activity, one column per step of the order config's
             // flow — which is why the last-mile fixtures exist: five statuses is five thin
             // columns, ten is a board.
+            //
+            // The board only groups by a config's flow once that config is chosen in its
+            // "Select Order Type" filter; with none chosen it shows the generic columns
+            // (Created / Dispatched / Started / Completed) with every order in Created.
             interact: async (page) => {
                 await page.getByRole('button', { name: 'Board' }).first().click();
+                await page.locator('.order-board-type-filter').first().click();
+                await page.locator('.ember-power-select-option', { hasText: 'Last-Mile Delivery' }).first().click();
             },
-            waitForAfterInteract: '[class*="kanban"], [class*="board"]',
+            // A column that only the last-mile flow has. Column titles are
+            // titleize(humanize(status)), hence the loose match.
+            waitForAfterInteract: 'text=/enroute dropoff/i',
             extraSettleMs: 2500,
         },
         {
@@ -110,7 +124,10 @@ export default {
                 match: { field: 'internal_id', value: 'FLT-2007' },
             },
             url: ({ publicId }) => `/fleet-ops/${publicId}`,
-            waitFor: '.leaflet-container',
+            // The details panel is an Overlay that slides in once the order resolves; waiting
+            // only for the map captured the route with no panel at all. Require the panel to
+            // be open so a failed order load is a failed capture, not a wrong one.
+            waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
             map: { settleTiles: true },
             extraSettleMs: 3000,
         },
@@ -148,12 +165,22 @@ export default {
             waitFor: 'main',
             // Select the seeded Last-Mile Delivery config, then open its Activity Flow tab —
             // the node graph of the ten-step flow OrderConfigSeeder defines.
+            //
+            // Selectors from the engine template (addon/templates/operations/order-config.hbs):
+            // the picker is a DropdownButton with class .order-config-select-button whose
+            // items are a.next-dd-item, and the tabs are .fleetops-pill-tabs .ui-tab with the
+            // title in a <span>. The tabs do not exist until a config is selected — the first
+            // attempt clicked a role=button named "Activity Flow" before selecting anything,
+            // and timed out on a tab that was not there.
             interact: async (page) => {
-                const picker = page.getByRole('combobox').first();
-                if (await picker.count()) await picker.selectOption({ label: 'Last-Mile Delivery' }).catch(() => {});
-                await page.getByRole('button', { name: /activity flow/i }).first().click();
+                await page.locator('.order-config-select-button').first().click();
+                await page.locator('a.next-dd-item', { hasText: 'Last-Mile Delivery' }).first().click();
+                await page
+                    .locator('.fleetops-pill-tabs .ui-tab', { hasText: /activity flow/i })
+                    .first()
+                    .click();
             },
-            waitForAfterInteract: 'svg, canvas, [class*="flow"]',
+            waitForAfterInteract: '.fleetops-pill-tabs .ui-tab.active',
             extraSettleMs: 2500,
         },
         {

@@ -135,13 +135,36 @@ jobs:
       # capture.sh runs Chromium inside the pinned Playwright image on the compose network, the
       # same way it does locally. That is what keeps a screenshot taken on a laptop comparable
       # to one taken here — see the header of scripts/capture.sh.
+      # The tile cache is deliberately not committed (OSM's usage policy), so it is carried
+      # between runs here instead. Restore + explicit save rather than actions/cache alone,
+      # because the implicit save only happens when the job succeeds — and a run that failed
+      # on the twelfth screen still fetched every tile the first eleven needed.
+      - name: Restore map tile cache
+        id: tile-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: capture/.cache/tiles
+          key: tiles-${{ hashFiles('capture/manifests/**', 'seeders/**') }}
+          restore-keys: |
+            tiles-
+
       - name: Capture
         env:
           SHOWCASE_PASSWORD: ${{ secrets.SHOWCASE_PASSWORD }}
+          # Saves each screen's HTML into the artifact alongside the image, for diagnosing a
+          # wrong-looking capture without a local stack. Cheap; always on.
+          CAPTURE_DEBUG: '1'
         run: ./scripts/capture.sh ${{ steps.cfg.outputs.areas }}
 
       # Unconditional: when a run fails partway, the screenshots it did manage are the fastest
       # way to see how far it got and what the failing screen looked like.
+      - name: Save map tile cache
+        if: always() && steps.tile-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: capture/.cache/tiles
+          key: ${{ steps.tile-cache.outputs.cache-primary-key }}
+
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4

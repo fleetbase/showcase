@@ -4,14 +4,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import {
-    applyInitScripts,
-    contextOptions,
-    ensureTheme,
-    installRoutes,
-    waitForBoot,
-    waitForQuiescence,
-} from './determinism.mjs';
+import { applyInitScripts, contextOptions, ensureTheme, installRoutes, waitForBoot, waitForQuiescence } from './determinism.mjs';
 import { domHash } from './domhash.mjs';
 import { pngToWebp } from './encode.mjs';
 
@@ -68,80 +61,82 @@ async function captureStable(page, { attempts = 4, gapMs = 250, entryId }) {
  *
  * @returns {Promise<Array<{id, file, theme, hash, bytes, url}>>}
  */
-export async function captureAll({
-    browser,
-    manifest,
-    ids,
-    baseUrl,
-    apiHost,
-    token,
-    userId,
-    tileCache,
-    outDir,
-    log = () => {},
-}) {
+export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, token, userId, tileCache, outDir, log = () => {} }) {
     const captured = [];
     const blocked = new Set();
 
     await mkdir(outDir, { recursive: true });
 
-    for (const theme of manifest.themes) {
-        const context = await browser.newContext(
-            contextOptions({ viewport: manifest.viewport, theme })
-        );
-        await applyInitScripts(context, { token, theme, apiHost, userId });
+    // The blocked-request list is reported in a finally: the run that fails on screen twelve
+    // is the one whose first eleven screens had blank basemaps, and a blocked tile host is
+    // the reason — so the report must survive the throw.
+    try {
+        for (const theme of manifest.themes) {
+            const context = await browser.newContext(contextOptions({ viewport: manifest.viewport, theme }));
+            await applyInitScripts(context, { token, theme, apiHost, userId });
 
-        const page = await context.newPage();
-        await installRoutes(page, {
-            baseUrl,
-            apiHost,
-            tileCache,
-            onBlocked: (url, reason) => blocked.add(`${reason}: ${url}`),
-        });
+            const page = await context.newPage();
+            await installRoutes(page, {
+                baseUrl,
+                apiHost,
+                tileCache,
+                onBlocked: (url, reason) => blocked.add(`${reason}: ${url}`),
+            });
 
-        // Boot once against the console root before capturing anything. This pays for the
-        // extension manager's lazy engine load, settles the session, and gives ensureTheme
-        // a booted app to verify against — so a theme problem surfaces once here rather
-        // than as sixteen wrong-theme screenshots.
-        // NAV_TIMEOUT, not Playwright's 30s default. The first navigation is the slowest of
-        // the run — it boots the Ember app, resolves the session and lazy-loads the engine —
-        // and on an emulated amd64 browser it does not finish in 30s. Leaving it at the
-        // default made the whole run fail on its very first goto while every later navigation
-        // had 45s.
-        await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-        await waitForBoot(page);
-        const themeResult = await ensureTheme(page, theme);
-        log(`theme "${theme}" active${themeResult.repaired ? ' (repaired via persisted option)' : ''}`);
-
-        for (const entry of manifest.entries) {
-            const url = urlFor(entry, ids);
-            const file = fileNameFor(manifest, entry, theme);
-
-            if (entry.viewport) await page.setViewportSize(entry.viewport);
-
-            await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+            // Boot once against the console root before capturing anything. This pays for the
+            // extension manager's lazy engine load, settles the session, and gives ensureTheme
+            // a booted app to verify against — so a theme problem surfaces once here rather
+            // than as sixteen wrong-theme screenshots.
+            // NAV_TIMEOUT, not Playwright's 30s default. The first navigation is the slowest of
+            // the run — it boots the Ember app, resolves the session and lazy-loads the engine —
+            // and on an emulated amd64 browser it does not finish in 30s. Leaving it at the
+            // default made the whole run fail on its very first goto while every later navigation
+            // had 45s.
+            await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
             await waitForBoot(page);
-            await waitForQuiescence(page, entry);
+            const themeResult = await ensureTheme(page, theme);
+            log(`theme "${theme}" active${themeResult.repaired ? ' (repaired via persisted option)' : ''}`);
 
-            const png = await captureStable(page, { entryId: `${entry.id}/${theme}` });
-            const hash = await domHash(page);
-            const webp = await pngToWebp(png);
+            for (const entry of manifest.entries) {
+                const url = urlFor(entry, ids);
+                const file = fileNameFor(manifest, entry, theme);
 
-            await writeFile(path.join(outDir, file), webp);
-            captured.push({ id: entry.id, file, theme, hash, bytes: webp.length, url });
-            log(`captured ${file} (${(webp.length / 1024).toFixed(0)} KB) from ${url}`);
+                if (entry.viewport) await page.setViewportSize(entry.viewport);
 
-            if (entry.viewport) await page.setViewportSize(manifest.viewport);
+                await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+                await waitForBoot(page);
+                await waitForQuiescence(page, entry);
+
+                const png = await captureStable(page, { entryId: `${entry.id}/${theme}` });
+                const hash = await domHash(page);
+                const webp = await pngToWebp(png);
+
+                await writeFile(path.join(outDir, file), webp);
+
+                // CAPTURE_DEBUG=1 also saves the page's HTML next to each screenshot. This exists
+                // for iterating from CI alone: when a screen comes out wrong — a panel that did not
+                // open, a board with every card in one column — the DOM says why, and a developer
+                // without a local stack has no other way to see it.
+                if (process.env.CAPTURE_DEBUG) {
+                    const debugDir = path.join(outDir, 'debug');
+                    await mkdir(debugDir, { recursive: true });
+                    await writeFile(path.join(debugDir, `${entry.id}-${theme}.html`), await page.content());
+                }
+                captured.push({ id: entry.id, file, theme, hash, bytes: webp.length, url });
+                log(`captured ${file} (${(webp.length / 1024).toFixed(0)} KB) from ${url}`);
+
+                if (entry.viewport) await page.setViewportSize(manifest.viewport);
+            }
+
+            await context.close();
         }
-
-        await context.close();
-    }
-
-    // Surfaced rather than thrown: a blocked request may be perfectly fine (an analytics
-    // beacon), but if a screenshot looks wrong this list is the first place to look.
-    if (blocked.size > 0) {
-        log(`blocked ${blocked.size} third-party request(s):`);
-        for (const entry of [...blocked].slice(0, 20)) log(`  - ${entry}`);
+    } finally {
+        // Surfaced rather than thrown: a blocked request may be perfectly fine (an analytics
+        // beacon), but if a screenshot looks wrong this list is the first place to look.
+        if (blocked.size > 0) {
+            log(`blocked ${blocked.size} third-party request(s):`);
+            for (const entry of [...blocked].slice(0, 20)) log(`  - ${entry}`);
+        }
     }
 
     return captured;

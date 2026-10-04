@@ -40,6 +40,9 @@ export class TileCache {
         this.offline = offline;
         this.userAgent = userAgent;
         this.stats = { hit: 0, miss: 0, fetched: 0, failed: 0 };
+        // The first few failure reasons. "N failed" alone cannot distinguish a tile server
+        // rejecting the User-Agent (403), rate-limiting a CI runner (429), or being down.
+        this.failures = [];
     }
 
     handles(url) {
@@ -64,10 +67,7 @@ export class TileCache {
         const file = this.pathFor(url);
 
         try {
-            const [body, meta] = await Promise.all([
-                readFile(file),
-                readFile(`${file}.json`, 'utf8').then(JSON.parse),
-            ]);
+            const [body, meta] = await Promise.all([readFile(file), readFile(`${file}.json`, 'utf8').then(JSON.parse)]);
             this.stats.hit += 1;
             return { body, contentType: meta.contentType };
         } catch {
@@ -79,7 +79,7 @@ export class TileCache {
         try {
             const response = await fetch(url, { headers: { 'User-Agent': this.userAgent } });
             if (!response.ok) {
-                this.stats.failed += 1;
+                this.#recordFailure(`HTTP ${response.status} ${url}`);
                 return null;
             }
 
@@ -92,14 +92,20 @@ export class TileCache {
 
             this.stats.fetched += 1;
             return { body, contentType };
-        } catch {
-            this.stats.failed += 1;
+        } catch (error) {
+            this.#recordFailure(`${error.message} ${url}`);
             return null;
         }
     }
 
+    #recordFailure(reason) {
+        this.stats.failed += 1;
+        if (this.failures.length < 5) this.failures.push(reason);
+    }
+
     summary() {
         const { hit, miss, fetched, failed } = this.stats;
-        return `tiles: ${hit} cached, ${miss} missed (${fetched} fetched, ${failed} failed)`;
+        const line = `tiles: ${hit} cached, ${miss} missed (${fetched} fetched, ${failed} failed)`;
+        return this.failures.length > 0 ? `${line}\n  first failures:\n    ${this.failures.join('\n    ')}` : line;
     }
 }

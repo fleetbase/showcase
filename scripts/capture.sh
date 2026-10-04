@@ -145,6 +145,7 @@ for area in "${AREAS[@]}"; do
         -e API_HOST=http://proxy \
         -e "SHOWCASE_TOKEN=${TOKEN}" \
         -e "SEEDED_FIXTURES=${SEEDED_FIXTURES}" \
+        -e "CAPTURE_DEBUG=${CAPTURE_DEBUG:-}" \
         -e "MANIFEST=${manifest}" \
         -e "AREA=${area}" \
         "$IMAGE" \
