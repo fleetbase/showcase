@@ -30,8 +30,6 @@
 //                                wrong or the feature moved. The API does serve
 //                                /int/v1/fuel-reports and /int/v1/issues with 2 rows each,
 //                                so the fixtures exist; only the console path is unknown.
-//   fleet-ops-order-details      /fleet-ops/<public_id> redirects to the orders index, so
-//                                this would have published the list under a details name.
 //   fleet-ops-orchestrator-1     Captures non-deterministically: its `main` fallback selector
 //                                lets the capture land before the metrics load, and the file
 //                                swung between 56 KB and 158 KB across runs. Needs a real
@@ -73,6 +71,49 @@ export default {
 
     entries: [
         // ── Operations ──────────────────────────────────────────────────────────────────
+        //
+        // The three entries the monorepo README leads with. Their selectors are PROVISIONAL
+        // until confirmed on a running stack (see the header).
+        {
+            id: 'live-orders-panel',
+            file: 'fleet-ops-live-orders-panel',
+            // The orders index opens on the Map view: a Leaflet map with the active orders
+            // listed in the side panel. No interaction needed — this is the default.
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container',
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'orders-kanban',
+            file: 'fleet-ops-orders-kanban',
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container, main',
+            // Board view groups orders by activity, one column per step of the order config's
+            // flow — which is why the last-mile fixtures exist: five statuses is five thin
+            // columns, ten is a board.
+            interact: async (page) => {
+                await page.getByRole('button', { name: 'Board' }).first().click();
+            },
+            waitForAfterInteract: '[class*="kanban"], [class*="board"]',
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'multi-waypoint-order',
+            file: 'fleet-ops-multi-waypoint-order',
+            // FLT-2007: picked up, three stops, driver and vehicle assigned, mid-route. The
+            // details view is a panel over the map, so the route and the activity timeline
+            // both render.
+            resolve: {
+                resource: 'orders',
+                query: 'FLT-2007',
+                match: { field: 'internal_id', value: 'FLT-2007' },
+            },
+            url: ({ publicId }) => `/fleet-ops/${publicId}`,
+            waitFor: '.leaflet-container',
+            map: { settleTiles: true },
+            extraSettleMs: 3000,
+        },
         {
             id: 'orders-table-list',
             file: 'fleet-ops-orders-table-list',
@@ -99,6 +140,21 @@ export default {
             url: '/fleet-ops/order-config',
             waitFor: '.order-config-container, [data-test-id="order-config"], main',
             extraSettleMs: 400,
+        },
+        {
+            id: 'order-config-activity-flow',
+            file: 'fleet-ops-order-config-activity-flow',
+            url: '/fleet-ops/order-config',
+            waitFor: 'main',
+            // Select the seeded Last-Mile Delivery config, then open its Activity Flow tab —
+            // the node graph of the ten-step flow OrderConfigSeeder defines.
+            interact: async (page) => {
+                const picker = page.getByRole('combobox').first();
+                if (await picker.count()) await picker.selectOption({ label: 'Last-Mile Delivery' }).catch(() => {});
+                await page.getByRole('button', { name: /activity flow/i }).first().click();
+            },
+            waitForAfterInteract: 'svg, canvas, [class*="flow"]',
+            extraSettleMs: 2500,
         },
         {
             id: 'service-rate-list',
