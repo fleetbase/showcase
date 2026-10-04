@@ -186,9 +186,14 @@ class NetworkSeeder extends Seeder
             // `contact` rows appear on the one the screenshot targets. Upstream seeds a single
             // one, which renders as a one-row table — technically correct and useless as a
             // marketing image.
-            'warehouse_lead' => ['Daniel Ong', 'contact', 'daniel.ong@demo.fleetbase.io', '+6591000004', 'west_depot'],
-            'airport_lead'   => ['Grace Wong', 'contact', 'grace.wong@demo.fleetbase.io', '+6591000005', 'airport_hub'],
-            'retail_lead'    => ['Marcus Lim', 'contact', 'marcus.lim@demo.fleetbase.io', '+6591000006', 'orchard_store'],
+            //
+            // Distinct people from the IAM users, on purpose. An earlier version reused three
+            // IAM names and emails here; creating a Contact with an email that already belongs
+            // to a User latches onto that User and overwrites its phone, so the IAM users
+            // screenshot showed contact phone numbers against user rows.
+            'warehouse_lead' => ['Wei Lin Teo', 'contact', 'weilin.teo@demo.fleetbase.io', '+6591000004', 'west_depot'],
+            'airport_lead'   => ['Farhan Yusof', 'contact', 'farhan.yusof@demo.fleetbase.io', '+6591000005', 'airport_hub'],
+            'retail_lead'    => ['Chloe Ng', 'contact', 'chloe.ng@demo.fleetbase.io', '+6591000006', 'orchard_store'],
         ];
     }
 
