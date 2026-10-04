@@ -52,13 +52,13 @@ try {
 
     // The opposite direction for drivers: their location age is measured against the SERVER
     // clock (TrackingContextBuilder: now() - drivers.updated_at), and nothing rendered reads
-    // drivers.updated_at itself, so the online drivers are touched to real now. This is what
-    // turns "Driver stale · 262d" and the Stale GPS badges into a live signal. The age that
-    // the tracking footer prints will read a few minutes and vary slightly between runs;
-    // that is the one accepted source of drift, and it sits below the fold of the hero.
+    // drivers.updated_at itself, so every driver is touched to real now — the offline one
+    // too, or the one order assigned to her keeps a Stale GPS badge on the live panel. This
+    // is what turns "Driver stale · 262d" into a live signal. The age that the tracking
+    // footer prints will read a few minutes and vary slightly between runs; that is the one
+    // accepted source of drift, and it sits below the fold of the hero.
     $drivers = \Illuminate\Support\Facades\DB::table('drivers')
         ->where('company_uuid', $company->uuid)
-        ->where('online', 1)
         ->whereNull('deleted_at')
         ->update(['updated_at' => \Illuminate\Support\Carbon::now()]);
 
