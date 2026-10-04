@@ -482,12 +482,25 @@ async function waitForGoogleImagery(page, { timeout = 45_000, sampleMs = 400 } =
             };
         });
 
-        if (pending === 0 && loaded === previous && loaded > 0) return;
+        if (pending === 0 && loaded === previous && loaded > 0) break;
         previous = loaded;
         await page.waitForTimeout(sampleMs);
     }
+    if (previous <= 0) throw new Error('Google Maps imagery did not settle');
 
-    throw new Error('Google Maps imagery did not settle');
+    // A key that is not authorised for this origin still renders a map — watermarked "For
+    // development purposes only" behind a "This page can't load Google Maps correctly"
+    // dialog. That is a key-configuration failure (HTTP-referrer restriction missing
+    // http://proxy/* and http://localhost/*, or billing / the Maps JavaScript API not
+    // enabled), and it must fail the capture rather than ship as a screenshot.
+    const keyRejected = await page.evaluate(() => Boolean(document.querySelector('.gm-err-container')) || /can't load Google Maps correctly/i.test(document.body?.innerText ?? ''));
+    if (keyRejected) {
+        throw new Error(
+            'Google Maps rejected the API key for this origin ("This page can\'t load Google Maps correctly"). ' +
+                'Allow the referrers http://proxy/* and http://localhost/* on the key, and make sure the Maps ' +
+                'JavaScript API is enabled with billing. See README → Google Maps variants.'
+        );
+    }
 }
 
 /**
