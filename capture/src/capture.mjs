@@ -105,7 +105,19 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
 
                 await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
                 await waitForBoot(page);
-                await waitForQuiescence(page, entry);
+                try {
+                    await waitForQuiescence(page, entry);
+                } catch (error) {
+                    // The screen that failed is the one whose DOM matters most, and it is the
+                    // one the success path below never saves.
+                    if (process.env.CAPTURE_DEBUG) {
+                        const debugDir = path.join(outDir, 'debug');
+                        await mkdir(debugDir, { recursive: true });
+                        const html = await page.content().catch(() => '');
+                        await writeFile(path.join(debugDir, `${entry.id}-${theme}-FAILED.html`), html);
+                    }
+                    throw error;
+                }
 
                 const png = await captureStable(page, { entryId: `${entry.id}/${theme}` });
                 const hash = await domHash(page);
