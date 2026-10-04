@@ -4,7 +4,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { applyInitScripts, contextOptions, ensureTheme, installRoutes, waitForBoot, waitForQuiescence } from './determinism.mjs';
+import { applyInitScripts, contextOptions, ensureFreezeCss, ensureTheme, installRoutes, waitForBoot, waitForQuiescence } from './determinism.mjs';
 import { domHash } from './domhash.mjs';
 import { pngToWebp } from './encode.mjs';
 
@@ -105,6 +105,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
 
                 await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
                 await waitForBoot(page);
+                if (await ensureFreezeCss(page)) log(`  freeze stylesheet was missing on ${url}; injected late`);
                 try {
                     await waitForQuiescence(page, entry);
                 } catch (error) {

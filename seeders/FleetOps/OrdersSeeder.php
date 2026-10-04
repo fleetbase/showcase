@@ -384,6 +384,24 @@ class OrdersSeeder extends Seeder
             'region'          => 'SG',
         ]);
 
+        // TrackingNumberObserver::created inserts an "Order Created" tracking status (code
+        // CREATED, location 0,0, no company) and calls updateOwnerStatus(), which rewrites the
+        // order's status to `created` — after this seeder set it to picked_up or delivered.
+        // That is how every last-mile order landed in the board's Created column. The
+        // observer still has to run (it generates the tracking number, QR and barcode the
+        // label view renders), so undo its two side effects instead: drop its status row —
+        // the seeded history carries its own `created` step with a real location — and put
+        // the seeded status back with a query update, which fires no model events.
+        TrackingStatus::query()
+            ->where('tracking_number_uuid', $trackingNumber->uuid)
+            ->where('code', 'CREATED')
+            ->delete();
+
+        Order::query()->whereKey($order->getKey())->update([
+            'status'     => $order->status,
+            'updated_at' => $order->updated_at,
+        ]);
+
         return $trackingNumber;
     }
 

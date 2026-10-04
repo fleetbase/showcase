@@ -159,26 +159,47 @@ export async function applyInitScripts(context, { token, theme, apiHost, userId 
             window.localStorage.removeItem('fleetbase_runtime_config_version');
             window.localStorage.removeItem('@fleetbase/storage:local-cache');
 
+            // Register the fallbacks BEFORE the first attempt. An init script runs before the
+            // document has a <head> — or even a documentElement — so the first attempt can
+            // throw, and when the listener was registered after it nothing ever retried: the
+            // captured DOM of every screen so far had no freeze stylesheet at all, which is
+            // why the tile-opacity override "did not work".
             const inject = () => {
-                if (document.getElementById('flb-screenshot-freeze')) return;
-                const el = document.createElement('style');
-                el.id = 'flb-screenshot-freeze';
-                el.textContent = styles;
-                (document.head || document.documentElement).appendChild(el);
+                try {
+                    if (document.getElementById('flb-screenshot-freeze')) return;
+                    const root = document.head || document.documentElement;
+                    if (!root) return;
+                    const el = document.createElement('style');
+                    el.id = 'flb-screenshot-freeze';
+                    el.textContent = styles;
+                    root.appendChild(el);
+                } catch {
+                    // retried on the next lifecycle event
+                }
             };
-            inject();
+            document.addEventListener('readystatechange', inject);
             document.addEventListener('DOMContentLoaded', inject);
+            inject();
         },
         { session, userOptions, styles: FREEZE_CSS }
     );
 
-    // setFixedTime, deliberately, rather than install()+pauseAt(). install() replaces the
-    // timer functions and stops them advancing until told to, which stalls Ember's runloop
-    // and ember-concurrency tasks — the app never finishes booting. setFixedTime pins only
-    // Date.now()/new Date(), which is all that relative-time rendering reads, and leaves
-    // timers running normally.
-    for (const page of context.pages()) await page.clock.setFixedTime(FROZEN_TIME);
-    context.on('page', (page) => page.clock.setFixedTime(FROZEN_TIME).catch(() => {}));
+    // setSystemTime, deliberately, rather than setFixedTime or install()+pauseAt().
+    //
+    // install() replaces the timer functions and stops them advancing until told to, which
+    // stalls Ember's runloop and ember-concurrency tasks — the app never finishes booting.
+    //
+    // setFixedTime looked right and was subtly fatal: it pins Date.now() while leaving
+    // setTimeout running, but Ember's runloop (Backburner) schedules `later`/`next` as
+    // `Date.now() + wait` and fires a timer only once `Date.now()` has passed that — so with
+    // Date pinned, nothing scheduled through `next()` or `later()` ever runs. The order
+    // details Overlay opens in a `next()`; Leaflet fades tiles in by `Date.now() - loaded`.
+    // Both silently never happened.
+    //
+    // setSystemTime starts the clock at a fixed instant and lets it flow from there, so
+    // relative-time rendering ("3 months ago") is stable to the day and the runloop works.
+    for (const page of context.pages()) await page.clock.setSystemTime(FROZEN_TIME);
+    context.on('page', (page) => page.clock.setSystemTime(FROZEN_TIME).catch(() => {}));
 
     return { apiHost };
 }
@@ -351,6 +372,22 @@ export async function ensureTheme(page, theme) {
  * handleAuthentication() and removed on a 600-1800ms timer. Capturing through it produces
  * a screenshot of a spinner that looks, in a diff, exactly like a real UI change.
  */
+/**
+ * Belt and braces for the init-script injection above: after the app has booted, make sure
+ * the freeze stylesheet really is in the document, and add it if not. Cheap, idempotent,
+ * and the difference between "determinism" and "determinism we assumed".
+ */
+export async function ensureFreezeCss(page) {
+    const present = await page.evaluate(() => Boolean(document.getElementById('flb-screenshot-freeze')));
+    if (present) return false;
+    await page.addStyleTag({ content: `/* flb-screenshot-freeze (late) */\n${FREEZE_CSS}` });
+    await page.evaluate(() => {
+        const el = [...document.querySelectorAll('style')].find((s) => s.textContent.startsWith('/* flb-screenshot-freeze (late) */'));
+        if (el) el.id = 'flb-screenshot-freeze';
+    });
+    return true;
+}
+
 export async function waitForBoot(page, { timeout = 60_000 } = {}) {
     await page.waitForFunction(() => !document.getElementById('boot-loader'), null, { timeout });
     await page.waitForFunction(() => !document.querySelector('.overloader'), null, { timeout });
