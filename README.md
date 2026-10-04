@@ -135,6 +135,29 @@ wants anyway.
 | Storefront | ⬜ | ⬜ |
 | Ledger | ⬜ | ⬜ |
 
+## Google Maps variants
+
+The console can render its *live operations map* with Google Maps instead of Leaflet
+(Fleet-Ops → Settings → Map). With a `GOOGLE_MAPS_API_KEY` in the environment — the
+`GOOGLE_MAPS_API_KEY` repository secret in CI, or `GOOGLE_MAPS_API_KEY=… ./scripts/up.sh`
+locally — `scripts/capture.sh` runs a second pass after the Leaflet one: it switches the
+showcase organization's map provider to Google, captures every manifest entry that declares
+`map.google` with a `-google` suffix (`fleet-ops-live-orders-panel-google.webp`,
+`…-google-light.webp`), and switches back.
+
+What to know before enabling it:
+
+- Only the live map (orders index, order details, the drawer's position listing) switches
+  providers. Geofence and service-area editors, place pickers and the tracking page are
+  Leaflet-only in the engine, so there is nothing to capture for them.
+- Restrict the key by HTTP referrer to `http://proxy/*` (the capture container) and
+  `http://localhost/*` (a laptop). The key is never written into the image set; the console
+  fetches it from the API at runtime.
+- Google's terms forbid caching tiles, so this pass hits the network live and its output is
+  not byte-stable between runs. `compare.mjs` therefore reports Google captures but does not
+  stage them into the fleetbase.io pull request unless run with `--include-google`.
+- Keep Google's logo and attribution visible in anything published.
+
 ## Local caveats
 
 Output from a native macOS run is visually correct but **not** byte-comparable to CI — CoreText

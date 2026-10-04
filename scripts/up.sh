@@ -43,6 +43,9 @@ HTTP_PORT="$(carry HTTP_PORT 80)"
 # Likewise 38000 is compiled into the console for the socket connection. A developer whose own
 # Fleetbase dev stack already owns it can remap, at the cost of the realtime screens.
 WSS_PORT="$(carry WSS_PORT 38000)"
+# Optional; enables the Google Maps capture pass (scripts/capture.sh). Carried like the ports
+# so a key given once survives the next up.sh.
+GOOGLE_MAPS_API_KEY="$(carry GOOGLE_MAPS_API_KEY "")"
 
 cat > .env <<ENV
 # Written by scripts/up.sh — not committed.
@@ -50,6 +53,7 @@ RELEASE_TAG=${RELEASE_TAG}
 APP_KEY=${APP_KEY}
 HTTP_PORT=${HTTP_PORT}
 WSS_PORT=${WSS_PORT}
+GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
 ENV
 
 if [[ "$HTTP_PORT" != "80" ]]; then

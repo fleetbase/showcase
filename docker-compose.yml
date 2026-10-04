@@ -46,6 +46,10 @@ x-api-env: &api-env
   REGISTRY_HOST: https://registry.fleetbase.io
   REGISTRY_PREINSTALLED_EXTENSIONS: "true"
   OSRM_HOST: https://router.project-osrm.org
+  # Optional. With a key here, Fleet-Ops can switch its live map to Google Maps: the console
+  # never sees the key in config — it asks the API (fleet-ops/settings/map), which reads it
+  # from this variable. Empty means the Google capture pass is skipped. See README.
+  GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
 
 services:
   # ── The single origin ────────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@
 //   out/captures.json     per-file DOM hash, byte size and source URL
 //   out/resolved-ids.json which public_id each detail entry resolved to
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright';
@@ -28,6 +28,11 @@ const { values } = parseArgs({
         only: { type: 'string' },
         'offline-tiles': { type: 'boolean', default: false },
         'cache-dir': { type: 'string', default: './.cache' },
+        // 'google' captures only the entries that declare `map.google`, with a -google suffix,
+        // against a stack whose live map has been switched to Google Maps (scripts/capture.sh
+        // does the switching). Google's terms forbid caching tiles, so this pass hits the
+        // network live and its output is review material, not a byte-stable baseline.
+        'map-provider': { type: 'string', default: 'leaflet' },
     },
 });
 
@@ -68,7 +73,20 @@ async function main() {
     const manifestPath = path.resolve(values.manifest);
     const { default: manifest } = await import(manifestPath);
 
+    const mapProvider = values['map-provider'];
+    if (!['leaflet', 'google'].includes(mapProvider)) {
+        console.error(`::error::--map-provider must be leaflet or google, got "${mapProvider}"`);
+        process.exit(1);
+    }
+
     let entries = manifest.entries;
+    if (mapProvider === 'google') {
+        entries = entries.filter((entry) => entry.map?.google);
+        if (entries.length === 0) {
+            console.log(`No entries in ${values.manifest} declare map.google; nothing to capture for Google Maps.`);
+            return;
+        }
+    }
     if (values.only) {
         const wanted = new Set(values.only.split(',').map((id) => id.trim()));
         entries = entries.filter((entry) => wanted.has(entry.id));
@@ -78,7 +96,7 @@ async function main() {
         }
     }
 
-    console.log(`Capturing ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} x ${manifest.themes.length} theme(s)`);
+    console.log(`Capturing ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} x ${manifest.themes.length} theme(s)${mapProvider === 'google' ? ' [Google Maps]' : ''}`);
     console.log(`  console: ${baseUrl}`);
     console.log(`  api:     ${apiHost}/${namespace}`);
 
@@ -145,6 +163,7 @@ async function main() {
             userId,
             tileCache,
             outDir,
+            mapProvider,
             log,
         });
     } finally {
@@ -154,7 +173,17 @@ async function main() {
         log(tileCache.summary());
     }
 
-    await writeFile(path.join(outDir, 'captures.json'), `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured }, null, 2)}\n`);
+    // The Google pass appends to the Leaflet pass's captures.json rather than replacing it, so
+    // compare.mjs sees one list per area.
+    let previous = [];
+    if (mapProvider === 'google') {
+        try {
+            previous = JSON.parse(await readFile(path.join(outDir, 'captures.json'), 'utf8')).captured ?? [];
+        } catch {
+            previous = [];
+        }
+    }
+    await writeFile(path.join(outDir, 'captures.json'), `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured: [...previous, ...captured] }, null, 2)}\n`);
     await writeFile(path.join(outDir, 'resolved-ids.json'), `${JSON.stringify(ids, null, 2)}\n`);
 
     console.log(`\n✔ wrote ${captured.length} file(s) to ${outDir}`);

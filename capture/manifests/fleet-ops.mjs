@@ -89,7 +89,10 @@ export default {
             // The Overlay puts `is-open` on its root and the caller's class on the inner
             // panel, so the two never sit on one element.
             waitForAfterInteract: '.next-content-overlay.is-open .orders-panel',
-            map: { settleTiles: true },
+            // The live map is the one surface the engine can render with Google Maps; the
+            // Google pass (scripts/capture.sh, with GOOGLE_MAPS_API_KEY) captures this entry
+            // again as fleet-ops-live-orders-panel-google.
+            map: { settleTiles: true, google: { waitFor: '.google-live-map-container .gm-style' } },
             extraSettleMs: 2500,
         },
         {
@@ -130,7 +133,8 @@ export default {
             // only for the map captured the route with no panel at all. Require the panel to
             // be open so a failed order load is a failed capture, not a wrong one.
             waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
-            map: { settleTiles: true },
+            // Also captured on Google Maps (the details panel sits over the same live map).
+            map: { settleTiles: true, google: {} },
             extraSettleMs: 3000,
         },
         {
