@@ -8,7 +8,7 @@ use Fleetbase\FleetOps\Models\OrderConfig;
 use Fleetbase\Models\Company;
 use Fleetbase\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
+use Ramsey\Uuid\Uuid;
 
 /**
  * A custom order configuration with a real activity flow.
@@ -113,7 +113,9 @@ class OrderConfigSeeder extends Seeder
                 // Deterministic, unlike upstream's Str::uuid(): the editor keys its nodes by
                 // this, and a value that changes every seed would churn the DOM hash the
                 // capture uses to tell real changes from rendering noise.
-                'internalId'  => (string) Str::uuid5(Str::uuid5(Str::uuid5('00000000-0000-0000-0000-000000000000', 'showcase'), 'last-mile-delivery'), $key),
+                // Ramsey directly: Laravel's Str has no name-based uuid (Str::uuid5 does not
+                // exist — that was the first CI failure of this seeder).
+                'internalId'  => Uuid::uuid5(Uuid::NAMESPACE_URL, 'fleetbase-showcase:last-mile-delivery:' . $key)->toString(),
                 'pod_method'  => 'scan',
                 'require_pod' => $pod,
             ];
