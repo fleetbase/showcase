@@ -53,29 +53,37 @@ class FleetSeeder extends Seeder
             $this->seedFleetMemberships($fleets, $drivers, $vehicles);
             $this->seedFuelReports($company, $users, $drivers, $vehicles);
             $this->seedIssues($company, $users, $drivers, $vehicles);
-            $this->relaxStaleLocationThreshold();
+            $this->configureTrackingSettings();
 
             $this->command?->info('Seeded ' . $this->seedName() . ' fleet fixtures for company: ' . $company->public_id);
         });
     }
 
     /**
-     * Keep the "Stale GPS" badges off the order cards.
+     * Keep the warning badges off the order cards: "Stale GPS" and "Fallback ETA".
      *
-     * The tracking intelligence flags a driver's location as stale when drivers.updated_at
-     * is older than stale_location_threshold_seconds (default 300) against the SERVER clock,
-     * which no capture setting can pin. scripts/freeze-timestamps.php touches the online
-     * drivers right before the capture, but a slow CI step between the two would bring the
-     * badge back on some runs and not others — exactly the nondeterminism this repo exists
-     * to avoid. A day-long threshold makes the outcome independent of how long the stack
-     * takes; it is a system setting, so it is merged over whatever else is configured.
+     * Stale: the tracking intelligence flags a driver's location as stale when
+     * drivers.updated_at is older than stale_location_threshold_seconds (default 300) against
+     * the SERVER clock, which no capture setting can pin. scripts/freeze-timestamps.php
+     * touches the drivers right before the capture, but a slow CI step between the two would
+     * bring the badge back on some runs and not others — exactly the nondeterminism this repo
+     * exists to avoid. A day-long threshold makes the outcome independent of how long the
+     * stack takes.
+     *
+     * Fallback: the default preferred provider is google_routes, which has no API key here,
+     * so every ETA is computed by the OSRM fallback and every card says so. Making OSRM the
+     * preferred provider is the honest version of the same computation without the warning.
+     *
+     * Both are system settings, merged over whatever else is configured.
      */
-    protected function relaxStaleLocationThreshold(): void
+    protected function configureTrackingSettings(): void
     {
         $existing = Setting::lookup('fleet-ops.tracking-settings', []);
         $existing = is_array($existing) ? $existing : [];
 
         Setting::configure('fleet-ops.tracking-settings', array_merge($existing, [
+            'provider'                         => 'osrm',
+            'fallbacks'                        => ['calculated'],
             'stale_location_threshold_seconds' => 86400,
         ]));
     }
