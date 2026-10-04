@@ -6,7 +6,6 @@ use Database\Seeders\Showcase\Concerns\SeedsShowcaseData;
 use Database\Seeders\Showcase\FleetOps\Concerns\BelongsToFleetOps;
 use Database\Seeders\Showcase\FleetOps\Concerns\ResolvesFleetOpsFixtures;
 use Fleetbase\FleetOps\Models\AssetConnection;
-use Fleetbase\FleetOps\Models\Equipment;
 use Fleetbase\FleetOps\Models\Trailer;
 use Fleetbase\FleetOps\Models\Vehicle;
 use Fleetbase\Models\Company;
@@ -14,7 +13,7 @@ use Fleetbase\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * Trailers: a small fleet of them, one towed, one carrying equipment.
+ * Trailers: a small fleet of them, one towed. Equipment is attached by MaintenanceSeeder.
  *
  * Trailers are first-class assets since fleetops 0.6.x (the `assets` table, asset_class
  * `trailer`), with their own list, detail panel and tabs — positions, devices, equipment,
@@ -41,14 +40,14 @@ class TrailerSeeder extends Seeder
 
         $trailers = $this->seedTrailers($company);
         $this->seedConnections($company, $trailers);
-        $this->seedEquipment($company, $trailers);
+        // Equipment is seeded by MaintenanceSeeder (which owns and purges the model) and
+        // attached to these trailers there.
 
         $this->command?->info('Seeded ' . $this->seedName() . ' trailer fixtures for company: ' . $company->public_id);
     }
 
     public function purgeSeedData(): void
     {
-        $this->purgeModel(Equipment::class);
         $this->purgeModel(AssetConnection::class);
         $this->purgeModel(Trailer::class);
     }
@@ -150,41 +149,5 @@ class TrailerSeeder extends Seeder
             'updated_by_uuid'           => $dispatcher?->uuid,
             'meta'                      => $this->meta('trailer_connection_1'),
         ]);
-    }
-
-    protected function seedEquipment(Company $company, array $trailers): void
-    {
-        $equipment = [
-            //  seed id                   trailer              name                      code      type              manufacturer    model        serial
-            'equipment_reefer_unit'  => ['trailer_reefer',    'Reefer Unit',            'EQ-001', 'refrigeration',  'Thermo King',  'SLXi-300',  'TK-SLX-2023-0412'],
-            'equipment_load_bars'    => ['trailer_dry_van_1', 'Load Bars (set of 6)',   'EQ-002', 'cargo_control',  'Ancra',        'SL-48',     'AN-SL48-2022-0088'],
-            'equipment_liftgate'     => ['trailer_dry_van_1', 'Tuck-away Liftgate',     'EQ-003', 'lifting',        'Maxon',        'TE-25',     'MX-TE25-2022-0193'],
-        ];
-
-        foreach ($equipment as $seedId => [$trailerSeedId, $name, $code, $type, $manufacturer, $model, $serial]) {
-            $trailer = $trailers[$trailerSeedId] ?? null;
-            if (!$trailer) {
-                continue;
-            }
-
-            $this->createRecord(Equipment::class, [
-                '_key'           => $this->fixtureKey($seedId),
-                'company_uuid'   => $company->uuid,
-                'name'           => $name,
-                'code'           => $code,
-                'type'           => $type,
-                'status'         => 'active',
-                'available'      => false,
-                'serial_number'  => $serial,
-                'manufacturer'   => $manufacturer,
-                'model'          => $model,
-                'equipable_type' => Trailer::class,
-                'equipable_uuid' => $trailer->uuid,
-                'purchased_at'   => $this->timestamp()->subYears(1)->toDateString(),
-                'purchase_price' => $type === 'refrigeration' ? 18500 : 1200,
-                'currency'       => 'SGD',
-                'meta'           => $this->meta($seedId),
-            ]);
-        }
     }
 }
