@@ -122,10 +122,108 @@ So the next Fleet-Ops work that moves the marketing site most: **report-builder*
 **orchestrator** (run + settings), **position playback** (seed a position history for one
 driver and one vehicle), **extensions-menu**, **orders-import**, **route-optimization**.
 
+## Screenshots that do not exist yet — and should
+
+The sections above only ask which *existing* library images this repo can regenerate. That
+is the wrong question for 279 docs pages: many describe console screens that have never
+been captured. This list pairs each such page with the screen the engine actually has
+(routes verified against fleetops 0.6.70, the engine in the v0.7.67 console) and what it
+takes to capture it. Names follow the library's convention. **Pri** 1 = page has nothing and
+the screen exists today; 2 = needs fixtures; 3 = needs another area's seeders or a product
+change.
+
+### Fleet-Ops
+
+| Docs page | Proposed screenshot(s) | Route / view | Needs | Pri |
+|---|---|---|---|---|
+| resources/trailers/overview | `fleet-ops-trailers-list`, `fleet-ops-trailer-details` | `/manage/trailers`, details panel | TrailerSeeder (**PR #7**) | 1 |
+| resources/trailers/connections-and-equipment | `fleet-ops-trailer-connections`, `fleet-ops-trailer-equipment` | details → Connections / Equipment tabs | PR #7 (connections); equipment tab next | 1 |
+| resources/trailers/telematics | `fleet-ops-trailer-devices` | details → Devices tab | a Device attached to a trailer (ConnectivitySeeder) | 2 |
+| resources/vehicles/capacity-and-payload | `fleet-ops-vehicle-capacity` | `/manage/vehicles/edit/:id` capacity section | none (vehicles carry capacity already) | 1 |
+| resources/vehicles/tracking (has 1) | `fleet-ops-vehicle-positions` | details → Positions tab | position history rows | 2 |
+| resources/drivers/navigator-access | reuse `fleet-ops-navigator-app-settings` | `/settings/navigator-app` | none | 1 |
+| resources/drivers/shift-schedules (has 1) | `fleet-ops-driver-schedule` | driver details → Schedule tab | shift schedule rows | 2 |
+| resources/vendors/integrated-vendors | `fleet-ops-integrated-vendor-new` | `/manage/vendors/integrated/new` provider picker | none | 1 |
+| resources/overview | reuse the six list screenshots | — | none | 1 |
+| resources/places (has 1) | `fleet-ops-place-details`, `fleet-ops-place-operations` | place details → Overview / Operations tabs | none | 1 |
+| resources/contacts (has 1) | `fleet-ops-customers-list` | `/manage/contacts/customers` | customers seeded as `customer` type | 2 |
+| resources/fuel-reports (has 1) | `fleet-ops-fuel-transactions` | `/manage/fuel-transactions` | fuel transactions (fuel provider sync) | 2 |
+| operations/order-configurations/order-types | `fleet-ops-order-config-new`, `fleet-ops-order-config-entities` | New Order Config modal; Last-Mile → Entities tab | none | 1 |
+| operations/orders/order-lifecycle | `fleet-ops-order-update-activity` | FLT-2007 → "Update activity" menu | none | 1 |
+| operations/orders/managing-orders (has 1) | `fleet-ops-order-new` (replace `create-order`), `fleet-ops-order-edit` | `/fleet-ops/new`, `/edit/:id` | none | 1 |
+| operations/scheduler/driver-shift-schedules | `fleet-ops-fleet-schedule` | `/scheduler/fleet-schedule` | shift schedule rows | 2 |
+| operations/service-areas-geofences/zones | `fleet-ops-zones` | live map with the service-area layer on (Marina Bay / Changi / Jurong zones are seeded) | none | 1 |
+| operations/service-areas-geofences/geofences | regenerate `fleet-ops-geofences` | service area → geofences | shelved entry; retest on 0.7.67 | 2 |
+| operations/orchestrator/vehicle-allocation, payload-capacity-allocation | `fleet-ops-orchestrator-allocation-phase` | workbench phase "Assign Vehicles" | an orchestrator run | 2 |
+| operations/routes (no docs page!) | `fleet-ops-routes-list`, `fleet-ops-route-details` | `/fleet-ops/routes` | routes seeded | 2 — and a docs page |
+| maintenance/inspections ×4 | `fleet-ops-inspection-forms`, `fleet-ops-inspection-form-builder`, `fleet-ops-inspections-list`, `fleet-ops-inspection-details` | `/maintenance/inspection-forms`, `/inspection-submissions` | an inspection form + a submission | 2 |
+| maintenance/work-orders (has 1), parts (has 1), equipment (has 1) | `fleet-ops-work-order-details`, `fleet-ops-part-details`, `fleet-ops-equipment-details` | details panels | MaintenanceSeeder already seeds these | 1 |
+| connectivity/events, sensors, telematics (have 1 each) | `fleet-ops-device-details`, `fleet-ops-sensor-details`, `fleet-ops-telematics-provider` | details panels; `/connectivity/telematics` | ConnectivitySeeder (devices exist) | 1–2 |
+| recipes/fuel-provider-integrations | `fleet-ops-fuel-integrations` | `/connectivity/fuel-integrations` | none for the empty/intro state | 1 |
+| analytics/reports (has 1) | `fleet-ops-report-result` | `/analytics/reports/:id/result` | a saved report | 2 |
+| settings/* (10 pages, 8 have 1) | `fleet-ops-telematics-settings`, `fleet-ops-custom-fields-order` | `/settings/telematics`, custom fields on the order config | none | 1 |
+| getting-started/core-concepts | reuse one screenshot per concept section | — | none | 1 |
+
+### Platform / IAM / Admin / Developers
+
+| Docs page | Proposed screenshot(s) | Route / view | Needs | Pri |
+|---|---|---|---|---|
+| identity-and-access/user-management (53-word stub) | reuse `iam-users-management`; the page needs writing | — | — | 1 |
+| identity-and-access/oauth-sign-in | `console-login-providers` | `/auth/login` with a provider configured | admin OAuth provider config (no real OAuth round-trip needed for the button) | 2 |
+| system-setup/oauth-sign-in | `admin-oauth-settings` | `/admin/…/oauth` | admin role (owner) | 1 |
+| extensions/index | reuse `extensions-browse` | — | registry reachable | 1 |
+| recipes/set-up-real-time-tracking | reuse `developers-websockets` | — | wss listener (proxy has it) | 1 |
+| getting-started/overview | reuse `console-dashboard` | — | General area | 3 |
+| console-features/* (have 1 each) | `console-dashboard-widget-config`, `console-chat-new-channel` | dashboard widget settings; chat | General area seeders | 3 |
+
+### Storefront (every page below has a console screen; needs the Storefront seeders)
+
+| Docs page | Proposed screenshot(s) | Route / view |
+|---|---|---|
+| customers/overview | `storefront-customers-list` | `/storefront/customers` |
+| catalog/pricing | `storefront-product-pricing` | product form, pricing fields |
+| stores/operating-hours | `storefront-store-hours` | settings → Location → hours |
+| settings/api | `storefront-settings-api` | settings → API tab |
+| orders/payment-gateways | reuse `storefront-payment-gateways-list` (wired in gateways.mdx) | — |
+| getting-started/core-concepts, stores/overview | reuse `storefront-dashboard`, `storefront-settings-overview` | — |
+| orders/cart, checkout, service-quotes; customers/authentication; app/* | API/app-level — app screenshots only (the two wired in fleetbase.io#111) | — |
+
+### Ledger (every page has a console screen; needs the Ledger seeders with *balancing* fixtures)
+
+`ledger-chart-of-accounts`, `ledger-general-ledger`, `ledger-journal-entries`,
+`ledger-journal-entry-new`, `ledger-transactions-list`, `ledger-transaction-details`,
+`ledger-gateway-cash` / `-stripe` / `-qpay` / `-gnu-taler` (one per gateway page),
+`ledger-report-cash-flow` / `-income-statement` / `-trial-balance` / `-wallet-summary`,
+`ledger-settings-invoice` / `-payment` / `-accounting` — 17 images for the 20 pages that
+have none; billing/overview and payments/overview reuse the existing invoice and gateway
+images.
+
+### Customer portal
+Six library images, no docs section. Proposed: `fleet-ops/customer-portal/{overview,orders,invoices,support}.mdx` built around the six — a docs gap, not a screenshot gap.
+
+### Fleetbase AI (20 pages, none with a screenshot)
+The console has the prompt tray, chat sessions, action previews, and admin pages for
+providers, task/chat logs and usage analytics. With the docs' *Local Preview* provider no
+external key is needed. Proposed: `ai-prompt-tray`, `ai-chat-session`,
+`ai-action-preview-create-order`, `ai-provider-settings`, `ai-task-chat-logs`,
+`ai-usage-analytics` — 6 images that would cover 9 of the 20 pages; the rest are reference.
+
+### Pallet (22 pages)
+Commercial and out of this pipeline's scope; worth noting that 17 of the 22 pages have no
+sections at all — the gap there is content, not screenshots.
+
+### Pages that are fine without one
+`cli/**` (CLI reference), `ui/**` (component reference — a Storybook-style capture would be
+a different pipeline), `extension-development/**`, `extending-fleetbase/**`,
+`contributing/**`, `community/**`, `platform/quickstart/**` (deployment text):
+~150 pages, correctly screenshot-free.
+
 ## Recommended order of work
 
+0. **Trailers** — PR #7; the first entries that create images the library never had.
 1. **IAM modals (7) + Admin (11) + General non-onboarding (13)** — ~31 images, interaction-only,
    one small seeder for notifications/chat. Biggest coverage per line of code.
+1b. **Fleet-Ops Pri-1 "new" screenshots** from the table above (~16 images, no new fixtures).
 2. **Fleet-Ops I-tier (22)** — settings pages and service-rate forms; manifest entries only.
 3. **Fleet-Ops S-tier marketing set** — position history + orchestrator run + report schema +
    import dialog + route optimisation; this refreshes 60+ marketing page slots.
