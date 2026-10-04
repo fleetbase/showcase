@@ -86,7 +86,9 @@ export default {
             interact: async (page) => {
                 await page.locator('#map-toolbar-view-orders-button').click();
             },
-            waitForAfterInteract: '.orders-panel.is-open',
+            // The Overlay puts `is-open` on its root and the caller's class on the inner
+            // panel, so the two never sit on one element.
+            waitForAfterInteract: '.next-content-overlay.is-open .orders-panel',
             map: { settleTiles: true },
             extraSettleMs: 2500,
         },

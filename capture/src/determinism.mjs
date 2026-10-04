@@ -104,6 +104,12 @@ const FREEZE_CSS = `
 .leaflet-zoom-anim .leaflet-zoom-animated {
     transition: none !important;
 }
+/* The tile fade is not a CSS transition at all: GridLayer._updateOpacity sets each tile's
+   inline opacity to min(1, (Date.now() - tile.loaded) / 200) on every animation frame. With
+   the clock frozen that is 0 forever, so every tile downloads, decodes, counts as loaded —
+   and renders invisible. That was the blank basemap on every map screen. !important beats
+   the inline style. */
+.leaflet-tile-loaded { opacity: 1 !important; }
 /* A blinking cursor in a focused search field is a one-pixel-column diff that recurs at
    random depending on where in the blink cycle the capture lands. */
 input, textarea { caret-color: transparent !important; }
@@ -196,8 +202,7 @@ function isLocalOrigin(url, { baseUrl, apiHost }) {
 
 // Path prefixes the API owns. The proxy is what actually routes; this is how we find out
 // when it routed something wrongly. See installMisrouteGuard below.
-const API_PATHS =
-    /^\/(int|v1|storefront\/(int|v1)|ledger\/(int|v1|public)|customer-portal\/int|ai\/int|~registry|sanctum|health)(\/|$)/;
+const API_PATHS = /^\/(int|v1|storefront\/(int|v1)|ledger\/(int|v1|public)|customer-portal\/int|ai\/int|~registry|sanctum|health)(\/|$)/;
 
 /**
  * Fail the run when an API request comes back as HTML.
@@ -221,10 +226,7 @@ export function installMisrouteGuard(page, { onMisroute }) {
 
             const type = response.headers()['content-type'] ?? '';
             if (type.includes('text/html')) {
-                onMisroute(
-                    `${pathname} returned text/html — the proxy is routing this API path to the console. ` +
-                        'Add it to the @api matcher in docker/caddy/Caddyfile.'
-                );
+                onMisroute(`${pathname} returned text/html — the proxy is routing this API path to the console. ` + 'Add it to the @api matcher in docker/caddy/Caddyfile.');
             }
         } catch {
             /* not a URL we can parse; nothing to assert */
@@ -333,11 +335,7 @@ export async function ensureTheme(page, theme) {
     }, theme);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(
-        (wanted) => document.body?.dataset?.theme === wanted,
-        theme,
-        { timeout: 30_000 }
-    );
+    await page.waitForFunction((wanted) => document.body?.dataset?.theme === wanted, theme, { timeout: 30_000 });
     return { theme, repaired: true, ids: repaired };
 }
 
@@ -388,16 +386,9 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
         // turns "the seeder did not populate this resource" into a failure instead of a
         // published screenshot of an empty state.
         await page
-            .waitForFunction(
-                ({ selector, min }) => document.querySelectorAll(selector).length >= min,
-                { selector, min },
-                { timeout }
-            )
+            .waitForFunction(({ selector, min }) => document.querySelectorAll(selector).length >= min, { selector, min }, { timeout })
             .catch(() => {
-                throw new Error(
-                    `[${entry.id}] expected at least ${min} rows matching "${selector}"; ` +
-                        'the fixture data is missing or the selector is stale'
-                );
+                throw new Error(`[${entry.id}] expected at least ${min} rows matching "${selector}"; ` + 'the fixture data is missing or the selector is stale');
             });
     }
 
@@ -406,11 +397,7 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
     // Every <img> either finished or failed. `complete` is true for both, which is what we
     // want — a broken avatar should not hang the run, it should show up in the screenshot
     // and be caught by review.
-    await page.waitForFunction(
-        () => [...document.images].every((img) => img.complete),
-        null,
-        { timeout }
-    );
+    await page.waitForFunction(() => [...document.images].every((img) => img.complete), null, { timeout });
 
     if (entry.map?.settleTiles) await waitForTiles(page, { timeout });
 
