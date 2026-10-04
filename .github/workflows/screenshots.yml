@@ -7,8 +7,12 @@ name: Console Screenshots
 # opt-in — leave `open_pr` false and the run only produces an artifact, which is what you want
 # while iterating on fixtures and manifests.
 #
-# `repository_dispatch` is wired up so the monorepo can trigger this after it publishes images,
-# but nothing sends that event yet; the sender job in fleetbase/fleetbase is still to be written.
+# `repository_dispatch` is sent by fleetbase/fleetbase's publish-docker-images.yml after each
+# tag's images are pushed, carrying the tag in client_payload. Those runs produce an artifact
+# only, unless the repository variable OPEN_PR_ON_RELEASE is "true".
+#
+# release_tag defaults to `latest`, which resolves to the newest vX.Y.Z published for BOTH
+# images on Docker Hub — never the ambiguous :latest Docker tag.
 #
 # SETUP
 #   Secret SHOWCASE_PASSWORD  — the seeded demo account's password. Any strong value; it only
@@ -24,9 +28,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Fleetbase release to screenshot, e.g. v0.7.59'
+        description: "Fleetbase release to screenshot (e.g. v0.7.59), or 'latest' for the newest tag published for BOTH images"
         required: true
-        default: 'v0.7.59'
+        default: 'latest'
       areas:
         description: 'Space-separated manifests to capture'
         required: true
@@ -63,16 +67,48 @@ jobs:
           TAG="${{ inputs.release_tag }}"
           # A release-triggered run carries the tag in the dispatch payload instead.
           [[ -z "$TAG" ]] && TAG="$DISPATCH_TAG"
-          if [[ -z "$TAG" ]]; then
-            echo "::error::No release tag supplied by the input or the dispatch payload."
-            exit 1
+          [[ -z "$TAG" ]] && TAG="latest"
+
+          # "latest" is resolved to a concrete vX.Y.Z, never passed through. The :latest Docker
+          # tag is ambiguous (which build? does console:latest match api:latest?), and the
+          # artifact and pull request are named after the version they show. The newest tag
+          # that exists for BOTH images is the answer — the publisher pushes them in one bake,
+          # but a half-finished publish would otherwise pair a new API with an older console.
+          if [[ "$TAG" == "latest" ]]; then
+            TAG="$(python3 - <<'PY'
+          import json, re, sys, urllib.request
+          def tags(repo):
+              out, url = set(), f"https://hub.docker.com/v2/repositories/fleetbase/{repo}/tags/?page_size=100"
+              while url:
+                  with urllib.request.urlopen(url, timeout=30) as r:
+                      page = json.load(r)
+                  out |= {t["name"] for t in page["results"] if re.fullmatch(r"v\d+\.\d+\.\d+", t["name"])}
+                  url = page.get("next")
+              return out
+          both = tags("fleetbase-console") & tags("fleetbase-api")
+          if not both:
+              sys.exit("no vX.Y.Z tag is published for both fleetbase-console and fleetbase-api")
+          print(max(both, key=lambda t: tuple(int(n) for n in t[1:].split("."))))
+          PY
+          )"
           fi
           AREAS="${{ inputs.areas }}"
           [[ -z "$AREAS" ]] && AREAS="iam fleet-ops"
 
+          # Opening a pull request is opt-in for manual runs and, for release-triggered runs,
+          # governed by the repository variable OPEN_PR_ON_RELEASE — so a release can be made
+          # to just produce an artifact while the fixtures are still being tuned, and flipped
+          # to "open the PR" with no workflow change.
+          OPEN_PR=false
+          [[ "${{ inputs.open_pr }}" == "true" ]] && OPEN_PR=true
+          if [[ "${{ github.event_name }}" == "repository_dispatch" && "${{ vars.OPEN_PR_ON_RELEASE }}" == "true" ]]; then
+            OPEN_PR=true
+          fi
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "areas=$AREAS" >> "$GITHUB_OUTPUT"
-          echo "Capturing $AREAS from $TAG"
+          echo "open_pr=$OPEN_PR" >> "$GITHUB_OUTPUT"
+          echo "Capturing $AREAS from $TAG (open_pr=$OPEN_PR)"
 
       - name: Require SHOWCASE_PASSWORD
         run: |
@@ -127,7 +163,7 @@ jobs:
 
       # ── Optional: propose the changes on fleetbase.io ────────────────────────────────────
       - name: Checkout fleetbase.io
-        if: ${{ inputs.open_pr }}
+        if: steps.cfg.outputs.open_pr == 'true'
         uses: actions/checkout@v4
         with:
           repository: fleetbase/fleetbase.io
@@ -135,7 +171,7 @@ jobs:
           path: fleetbase-io
 
       - name: Compare against the published library
-        if: ${{ inputs.open_pr }}
+        if: steps.cfg.outputs.open_pr == 'true'
         id: compare
         run: |
           set -euo pipefail
@@ -154,7 +190,7 @@ jobs:
           echo "changed=$total" >> "$GITHUB_OUTPUT"
 
       - name: Open the pull request
-        if: ${{ inputs.open_pr && steps.compare.outputs.changed != '0' }}
+        if: steps.cfg.outputs.open_pr == 'true' && steps.compare.outputs.changed != '0'
         uses: peter-evans/create-pull-request@v8
         with:
           path: fleetbase-io
