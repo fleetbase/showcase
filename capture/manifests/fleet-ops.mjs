@@ -338,5 +338,17 @@ export default {
             waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
             extraSettleMs: 1500,
         },
+        {
+            id: 'trailer-equipment',
+            file: 'fleet-ops-trailer-equipment',
+            resolve: {
+                resource: 'trailers',
+                query: 'TRL-01',
+                match: { field: 'code', value: 'TRL-01' },
+            },
+            url: ({ publicId }) => `/fleet-ops/manage/trailers/${publicId}/equipment`,
+            waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
+            extraSettleMs: 1500,
+        },
     ],
 };

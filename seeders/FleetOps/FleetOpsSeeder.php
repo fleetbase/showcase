@@ -73,6 +73,7 @@ class FleetOpsSeeder extends Seeder
             // worth a screenshot.
             'trailer-details'     => $this->seededModel(Trailer::class, 'trailer_dry_van_1')?->public_id,
             'trailer-connections' => $this->seededModel(Trailer::class, 'trailer_dry_van_1')?->public_id,
+            'trailer-equipment'   => $this->seededModel(Trailer::class, 'trailer_dry_van_1')?->public_id,
         ]);
     }
 

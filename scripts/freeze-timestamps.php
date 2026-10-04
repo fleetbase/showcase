@@ -62,7 +62,17 @@ try {
         ->whereNull('deleted_at')
         ->update(['updated_at' => \Illuminate\Support\Carbon::now()]);
 
+    // Same clock problem for trailers: the list's connectivity badge compares
+    // assets.last_online_at with the server's now, so an "online" trailer stamped with the
+    // fixture date reads Offline. Nothing rendered shows the timestamp itself.
+    $trailers = \Illuminate\Support\Facades\DB::table('assets')
+        ->where('company_uuid', $company->uuid)
+        ->where('online', 1)
+        ->whereNull('deleted_at')
+        ->update(['last_online_at' => \Illuminate\Support\Carbon::now()]);
+
     echo PHP_EOL . 'FROZEN_USERS=' . $users . PHP_EOL;
+    echo 'FRESHENED_TRAILERS=' . $trailers . PHP_EOL;
     echo 'FROZEN_COMPANIES=' . $companies . PHP_EOL;
     echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
