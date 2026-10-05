@@ -8,6 +8,7 @@ use Database\Seeders\Showcase\FleetOps\Concerns\BelongsToFleetOps;
 use Database\Seeders\Showcase\FleetOps\Concerns\ResolvesFleetOpsFixtures;
 use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Order;
+use Fleetbase\FleetOps\Models\Trailer;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 
@@ -33,6 +34,7 @@ class FleetOpsSeeder extends Seeder
     protected const AREAS = [
         NetworkSeeder::class,
         FleetSeeder::class,
+        TrailerSeeder::class,
         OrderConfigSeeder::class,
         OrdersSeeder::class,
         ConnectivitySeeder::class,
@@ -67,6 +69,11 @@ class FleetOpsSeeder extends Seeder
             'order-details' => $this->seededModel(Order::class, 'order_started')?->public_id,
             // FLT-2007: the last-mile hero — three stops, mid-route, driver and vehicle assigned.
             'multi-waypoint-order' => $this->seededModel(Order::class, 'lm_picked_up_1')?->public_id,
+            // TRL-01: towed by JUR-07, carrying equipment — the trailer whose detail tabs are
+            // worth a screenshot.
+            'trailer-details'     => $this->seededModel(Trailer::class, 'trailer_dry_van_1')?->public_id,
+            'trailer-connections' => $this->seededModel(Trailer::class, 'trailer_dry_van_1')?->public_id,
+            'trailer-equipment'   => $this->seededModel(Trailer::class, 'trailer_dry_van_1')?->public_id,
         ]);
     }
 

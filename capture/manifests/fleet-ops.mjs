@@ -304,5 +304,55 @@ export default {
             waitFor: '.next-table-wrapper, main',
             extraSettleMs: 500,
         },
+
+        // ── Trailers ───────────────────────────────────────────────────────────────────
+        // Three docs pages (resources/trailers/*) and no screenshot anywhere: these are the
+        // first entries that create images the library never had. TrailerSeeder seeds four
+        // trailers, one towed by JUR-07 and carrying equipment.
+        {
+            id: 'trailers-list',
+            file: 'fleet-ops-trailers-list',
+            url: '/fleet-ops/manage/trailers',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 4 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'trailer-details',
+            file: 'fleet-ops-trailer-details',
+            resolve: {
+                resource: 'trailers',
+                query: 'TRL-01',
+                match: { field: 'code', value: 'TRL-01' },
+            },
+            url: ({ publicId }) => `/fleet-ops/manage/trailers/${publicId}`,
+            // A Layout::Resource::Panel over the list, like the order details panel.
+            waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'trailer-connections',
+            file: 'fleet-ops-trailer-connections',
+            resolve: {
+                resource: 'trailers',
+                query: 'TRL-01',
+                match: { field: 'code', value: 'TRL-01' },
+            },
+            url: ({ publicId }) => `/fleet-ops/manage/trailers/${publicId}/connections`,
+            waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'trailer-equipment',
+            file: 'fleet-ops-trailer-equipment',
+            resolve: {
+                resource: 'trailers',
+                query: 'TRL-01',
+                match: { field: 'code', value: 'TRL-01' },
+            },
+            url: ({ publicId }) => `/fleet-ops/manage/trailers/${publicId}/equipment`,
+            waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
+            extraSettleMs: 1500,
+        },
     ],
 };

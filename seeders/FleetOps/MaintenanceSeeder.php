@@ -19,6 +19,7 @@ use Fleetbase\FleetOps\Models\Equipment;
 use Fleetbase\FleetOps\Models\Maintenance;
 use Fleetbase\FleetOps\Models\MaintenanceSchedule;
 use Fleetbase\FleetOps\Models\Part;
+use Fleetbase\FleetOps\Models\Trailer;
 use Fleetbase\FleetOps\Models\Vehicle;
 use Fleetbase\FleetOps\Models\Vendor;
 use Fleetbase\FleetOps\Models\WorkOrder;
@@ -64,13 +65,21 @@ class MaintenanceSeeder extends Seeder
     protected function seedEquipment(Company $company): array
     {
         $vehicle   = $this->seededModel(Vehicle::class, 'van_east');
+        // Equipment lives here, not in TrailerSeeder, because this seeder purges every
+        // Equipment row the area tagged — rows seeded earlier by another seeder vanish when
+        // it runs. The trailer-mounted items (TrailerSeeder runs first, so the trailers
+        // exist) are what the trailer detail panel's Equipment tab shows.
         $equipment = [
-            'equipment_refrigeration_unit' => ['Carrier X4-7500', 'EQ-REF-001', 'refrigeration', 'Carrier', 'X4-7500', $vehicle],
-            'equipment_tail_lift'          => ['Dhollandia DH-LM', 'EQ-LIFT-001', 'liftgate', 'Dhollandia', 'DH-LM', $this->seededModel(Vehicle::class, 'truck_maintenance')],
+            //  seed id                        name                    code           type             manufacturer   model       serial               equipped to
+            'equipment_refrigeration_unit' => ['Carrier X4-7500',      'EQ-REF-001',  'refrigeration', 'Carrier',     'X4-7500',  'CAR-X47-2023-01187', $vehicle],
+            'equipment_tail_lift'          => ['Dhollandia DH-LM',     'EQ-LIFT-001', 'liftgate',      'Dhollandia',  'DH-LM',    'DHL-LM-2022-00641',  $this->seededModel(Vehicle::class, 'truck_maintenance')],
+            'equipment_trailer_liftgate'   => ['Maxon TE-25 liftgate', 'EQ-LIFT-002', 'liftgate',      'Maxon',       'TE-25',    'MX-TE25-2022-00193', $this->seededModel(Trailer::class, 'trailer_dry_van_1')],
+            'equipment_trailer_load_bars'  => ['Ancra SL-48 load bars', 'EQ-CRG-001', 'cargo_control', 'Ancra',       'SL-48',    'AN-SL48-2022-00088', $this->seededModel(Trailer::class, 'trailer_dry_van_1')],
+            'equipment_reefer_unit'        => ['Thermo King SLXi-300',  'EQ-REF-002', 'refrigeration', 'Thermo King', 'SLXi-300', 'TK-SLX-2023-00412',  $this->seededModel(Trailer::class, 'trailer_reefer')],
         ];
 
         $models = [];
-        foreach ($equipment as $seedId => [$name, $code, $type, $manufacturer, $model, $vehicle]) {
+        foreach ($equipment as $seedId => [$name, $code, $type, $manufacturer, $model, $serial, $equippedTo]) {
             $models[$seedId] = $this->createRecord(Equipment::class, [
                 '_key'          => $this->fixtureKey($seedId),
                 'company_uuid'  => $company->uuid,
@@ -78,11 +87,13 @@ class MaintenanceSeeder extends Seeder
                 'code'          => $code,
                 'type'          => $type,
                 'status'        => 'active',
-                'serial_number' => strtoupper($seedId),
+                // The detail panels print this under the name; an upper-cased seed id there
+                // reads like a fixture leak.
+                'serial_number' => $serial,
                 'manufacturer'  => $manufacturer,
                 'model'         => $model,
-                'equipable_type'=> Vehicle::class,
-                'equipable_uuid'=> $vehicle?->uuid,
+                'equipable_type'=> $equippedTo ? get_class($equippedTo) : null,
+                'equipable_uuid'=> $equippedTo?->uuid,
                 'purchased_at'  => $this->timestamp(-2400)->toDateString(),
                 'purchase_price'=> $type === 'refrigeration' ? 1240000 : 740000,
                 'currency'      => 'SGD',
