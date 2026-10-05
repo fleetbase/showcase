@@ -86,6 +86,26 @@ fi
 
 SEEDED_FIXTURES="$(cat .seeded-fixtures.json 2>/dev/null || true)"
 
+# The Google Maps pass runs only with a key, which up.sh carried into .env. Without one the
+# Leaflet captures are the whole output, which is the default and the deterministic one.
+GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-$(grep '^GOOGLE_MAPS_API_KEY=' .env 2>/dev/null | cut -d= -f2- || true)}"
+
+# Flip the live map provider for the showcase organization; see scripts/map-provider.php.
+set_map_provider() {
+    local provider="$1"
+    local code out
+    code="$(base64 < scripts/map-provider.php | tr -d '\n')"
+    out="$(docker compose exec -T \
+        -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Pte Ltd}" \
+        -e "SHOWCASE_MAP_PROVIDER=${provider}" \
+        application php artisan tinker --execute="eval(base64_decode('${code}'));" 2>&1 || true)"
+    printf '%s\n' "$out" | grep -E '^MAP_PROVIDER' || true
+    if ! printf '%s\n' "$out" | grep -q "^MAP_PROVIDER=${provider}$"; then
+        echo "::error::Could not switch the map provider to ${provider}."
+        return 1
+    fi
+}
+
 if [[ "$MODE" == "container" ]]; then
     # Single-sourced from capture/package.json, so the image and the npm package cannot drift
     # apart. bin/capture.mjs also refuses to run when PLAYWRIGHT_IMAGE_TAG does not match.
@@ -103,27 +123,31 @@ if [[ "$MODE" == "container" ]]; then
     echo "==> Capturing in ${IMAGE} (linux/amd64) on ${NETWORK}"
 fi
 
-for area in "${AREAS[@]}"; do
-    manifest="manifests/${area}.mjs"
+capture_area() {
+    local area="$1" provider="$2"
+    local manifest="manifests/${area}.mjs"
     if [[ ! -f "capture/${manifest}" ]]; then
         echo "::error::no manifest at capture/${manifest}"
         exit 1
     fi
 
     echo
-    echo "==> Capturing ${area}"
-    # Clear the area's output first. Without this, a file from an entry that has since been
-    # removed from the manifest survives in out/ and compare.mjs would happily stage it — the
-    # pull request then updates a screenshot nothing captures any more.
-    rm -rf "capture/out/${area}"
+    echo "==> Capturing ${area} (${provider})"
+    if [[ "$provider" == "leaflet" ]]; then
+        # Clear the area's output first. Without this, a file from an entry that has since been
+        # removed from the manifest survives in out/ and compare.mjs would happily stage it —
+        # the pull request then updates a screenshot nothing captures any more. The Google pass
+        # writes into the same directory afterwards, so only the first pass clears it.
+        rm -rf "capture/out/${area}"
+    fi
 
     if [[ "$MODE" == "native" ]]; then
         (
             cd capture
             BASE_URL="$HOST_URL" API_HOST="$HOST_URL" SHOWCASE_TOKEN="$TOKEN" SEEDED_FIXTURES="$SEEDED_FIXTURES" \
-                npm run --silent capture -- --manifest "$manifest" --out "./out/${area}"
+                npm run --silent capture -- --manifest "$manifest" --out "./out/${area}" --map-provider "$provider"
         )
-        continue
+        return 0
     fi
 
     # Inside the compose network the proxy is reachable as http://proxy on port 80, and that is
@@ -148,6 +172,7 @@ for area in "${AREAS[@]}"; do
         -e "CAPTURE_DEBUG=${CAPTURE_DEBUG:-}" \
         -e "MANIFEST=${manifest}" \
         -e "AREA=${area}" \
+        -e "MAP_PROVIDER=${provider}" \
         "$IMAGE" \
         bash -c '
             set -euo pipefail
@@ -158,9 +183,30 @@ for area in "${AREAS[@]}"; do
                 npm ci --no-audit --no-fund >/dev/null
                 echo "$want" > node_modules/.lock-sha256
             fi
-            node bin/capture.mjs --manifest "$MANIFEST" --out "./out/$AREA"
+            node bin/capture.mjs --manifest "$MANIFEST" --out "./out/$AREA" --map-provider "$MAP_PROVIDER"
         '
+}
+
+for area in "${AREAS[@]}"; do
+    capture_area "$area" leaflet
 done
+
+if [[ -n "$GOOGLE_MAPS_API_KEY" ]]; then
+    echo
+    echo "==> Google Maps pass (GOOGLE_MAPS_API_KEY is set)"
+    set_map_provider google
+    # Restore Leaflet whatever happens below: a stack left on Google would make the next
+    # Leaflet run capture Google tiles under Leaflet file names.
+    trap 'set_map_provider leaflet >/dev/null 2>&1 || true' EXIT
+    for area in "${AREAS[@]}"; do
+        capture_area "$area" google
+    done
+    set_map_provider leaflet
+    trap - EXIT
+else
+    echo
+    echo "    (no GOOGLE_MAPS_API_KEY — Google Maps pass skipped)"
+fi
 
 echo
 echo "✔ Captured: ${AREAS[*]}"

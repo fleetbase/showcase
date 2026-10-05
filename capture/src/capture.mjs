@@ -21,8 +21,9 @@ import { pngToWebp } from './encode.mjs';
 // order of magnitude slower.
 const NAV_TIMEOUT = Number(process.env.CAPTURE_NAV_TIMEOUT_MS ?? 120_000);
 
-export function fileNameFor(manifest, entry, theme) {
-    return theme === manifest.defaultTheme ? `${entry.file}.webp` : `${entry.file}-${theme}.webp`;
+export function fileNameFor(manifest, entry, theme, mapProvider = 'leaflet') {
+    const base = mapProvider === 'google' ? `${entry.file}-google` : entry.file;
+    return theme === manifest.defaultTheme ? `${base}.webp` : `${base}-${theme}.webp`;
 }
 
 function urlFor(entry, ids) {
@@ -61,7 +62,7 @@ async function captureStable(page, { attempts = 4, gapMs = 250, entryId }) {
  *
  * @returns {Promise<Array<{id, file, theme, hash, bytes, url}>>}
  */
-export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, token, userId, tileCache, outDir, log = () => {} }) {
+export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, token, userId, tileCache, outDir, mapProvider = 'leaflet', log = () => {} }) {
     const captured = [];
     const blocked = new Set();
 
@@ -80,6 +81,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                 baseUrl,
                 apiHost,
                 tileCache,
+                mapProvider,
                 onBlocked: (url, reason) => blocked.add(`${reason}: ${url}`),
             });
 
@@ -99,7 +101,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
 
             for (const entry of manifest.entries) {
                 const url = urlFor(entry, ids);
-                const file = fileNameFor(manifest, entry, theme);
+                const file = fileNameFor(manifest, entry, theme, mapProvider);
 
                 if (entry.viewport) await page.setViewportSize(entry.viewport);
 
@@ -107,7 +109,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                 await waitForBoot(page);
                 if (await ensureFreezeCss(page)) log(`  freeze stylesheet was missing on ${url}; injected late`);
                 try {
-                    await waitForQuiescence(page, entry);
+                    await waitForQuiescence(page, entry, { mapProvider });
                 } catch (error) {
                     // The screen that failed is the one whose DOM matters most, and it is the
                     // one the success path below never saves.
@@ -135,7 +137,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                     await mkdir(debugDir, { recursive: true });
                     await writeFile(path.join(debugDir, `${entry.id}-${theme}.html`), await page.content());
                 }
-                captured.push({ id: entry.id, file, theme, hash, bytes: webp.length, url });
+                captured.push({ id: entry.id, file, theme, hash, bytes: webp.length, url, provider: mapProvider });
                 log(`captured ${file} (${(webp.length / 1024).toFixed(0)} KB) from ${url}`);
 
                 if (entry.viewport) await page.setViewportSize(manifest.viewport);

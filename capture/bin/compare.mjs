@@ -31,6 +31,9 @@ const { values } = parseArgs({
         'pixel-threshold': { type: 'string', default: String(DEFAULT_PIXEL_THRESHOLD) },
         'changed-ratio': { type: 'string', default: String(DEFAULT_CHANGED_RATIO) },
         'dry-run': { type: 'boolean', default: false },
+        // Google Maps captures are fetched live (no tile cache — Google's terms) and are not
+        // byte-stable between runs, so by default they are reported but never staged.
+        'include-google': { type: 'boolean', default: false },
     },
 });
 
@@ -78,6 +81,10 @@ async function main() {
     const nextBaseline = { ...baseline };
 
     for (const capture of captures.captured) {
+        if (capture.provider === 'google' && !values['include-google']) {
+            console.log(`review  ${capture.file.padEnd(46)} Google Maps capture; not staged without --include-google`);
+            continue;
+        }
         const nextBuffer = await readFile(path.join(newDir, capture.file));
         const currentBuffer = await readIfPresent(path.join(currentDir, capture.file));
 
@@ -139,15 +146,10 @@ async function main() {
     // has ~150 files and this manifest covers 18 of them, so absence here means "not managed
     // by this pipeline", never "delete".
     const published = await readdir(currentDir).catch(() => []);
-    const unmanaged = published.filter(
-        (file) => file.endsWith('.webp') && !captures.captured.some((capture) => capture.file === file)
-    );
+    const unmanaged = published.filter((file) => file.endsWith('.webp') && !captures.captured.some((capture) => capture.file === file));
 
     await mkdir(path.dirname(path.resolve(values.report)), { recursive: true });
-    await writeFile(
-        path.resolve(values.report),
-        `${JSON.stringify({ area: captures.area, results, unmanagedCount: unmanaged.length }, null, 2)}\n`
-    );
+    await writeFile(path.resolve(values.report), `${JSON.stringify({ area: captures.area, results, unmanagedCount: unmanaged.length }, null, 2)}\n`);
 
     if (!values['dry-run']) {
         await mkdir(path.dirname(baselinePath), { recursive: true });

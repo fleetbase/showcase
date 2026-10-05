@@ -212,6 +212,14 @@ export async function applyInitScripts(context, { token, theme, apiHost, userId 
 // resolves its API host from window.location and drops the port, so one proxy serves both
 // roles on :80. The two arguments stay separate so a split stack (a local `ember serve`
 // against a separate API) still works.
+function hostnameOf(url) {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return '';
+    }
+}
+
 function isLocalOrigin(url, { baseUrl, apiHost }) {
     try {
         const { origin } = new URL(url);
@@ -290,13 +298,19 @@ async function avatarFor(url) {
  * remote asset (serve from fixtures), tile/routing (serve from the disk cache), or
  * unknown third party (abort loudly).
  */
-export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlocked }) {
+// Google Maps loads its API, tiles, fonts and marker imagery from this family of hosts. Only
+// allowed in the Google pass, and never cached: Google's terms forbid storing tiles, which is
+// also why those captures are not byte-stable and are kept out of the compare gate.
+const GOOGLE_MAPS_HOSTS = /(^|\.)(googleapis\.com|gstatic\.com|ggpht\.com|google\.com)$/i;
+
+export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlocked, mapProvider = 'leaflet' }) {
     await page.route('**/*', async (route) => {
         const request = route.request();
         const url = request.url();
 
         if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
         if (isLocalOrigin(url, { baseUrl, apiHost })) return route.continue();
+        if (mapProvider === 'google' && GOOGLE_MAPS_HOSTS.test(hostnameOf(url))) return route.continue();
 
         if (AVATAR_PATTERN.test(url)) {
             const asset = await avatarFor(url);
@@ -401,9 +415,12 @@ export async function waitForBoot(page, { timeout = 60_000 } = {}) {
  * assertion (the interaction is often what produces the rows), then the asynchronous tails —
  * fonts, images and map tiles — which only start once the content referencing them exists.
  */
-export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) {
-    if (entry.waitFor) {
-        await page.waitForSelector(entry.waitFor, { state: 'visible', timeout });
+export async function waitForQuiescence(page, entry, { timeout = 45_000, mapProvider = 'leaflet' } = {}) {
+    // In the Google pass an entry may name a different element to wait for — the live map's
+    // root is .google-live-map-container, not .leaflet-container.
+    const waitFor = mapProvider === 'google' && entry.map?.google?.waitFor ? entry.map.google.waitFor : entry.waitFor;
+    if (waitFor) {
+        await page.waitForSelector(waitFor, { state: 'visible', timeout });
     }
 
     // Interact BEFORE asserting rows. The interaction is usually what produces the content the
@@ -436,9 +453,54 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000 } = {}) 
     // and be caught by review.
     await page.waitForFunction(() => [...document.images].every((img) => img.complete), null, { timeout });
 
-    if (entry.map?.settleTiles) await waitForTiles(page, { timeout });
+    if (entry.map?.settleTiles) {
+        if (mapProvider === 'google') await waitForGoogleImagery(page, { timeout });
+        else await waitForTiles(page, { timeout });
+    }
 
     if (entry.extraSettleMs) await page.waitForTimeout(entry.extraSettleMs);
+}
+
+/**
+ * Google Maps has no per-tile "loaded" class. What it does have is a .gm-style root whose
+ * <img> tiles report `complete`, and a tile count that stops growing once the viewport is
+ * covered — so, like waitForTiles, require the count to hold steady across two samples.
+ */
+async function waitForGoogleImagery(page, { timeout = 45_000, sampleMs = 400 } = {}) {
+    const hasMap = await page.evaluate(() => document.querySelectorAll('.gm-style').length > 0);
+    if (!hasMap) return;
+
+    const deadline = Date.now() + timeout;
+    let previous = -1;
+
+    while (Date.now() < deadline) {
+        const { loaded, pending } = await page.evaluate(() => {
+            const images = [...document.querySelectorAll('.gm-style img')];
+            return {
+                loaded: images.filter((img) => img.complete).length,
+                pending: images.filter((img) => !img.complete).length,
+            };
+        });
+
+        if (pending === 0 && loaded === previous && loaded > 0) break;
+        previous = loaded;
+        await page.waitForTimeout(sampleMs);
+    }
+    if (previous <= 0) throw new Error('Google Maps imagery did not settle');
+
+    // A key that is not authorised for this origin still renders a map — watermarked "For
+    // development purposes only" behind a "This page can't load Google Maps correctly"
+    // dialog. That is a key-configuration failure (HTTP-referrer restriction missing
+    // http://proxy/* and http://localhost/*, or billing / the Maps JavaScript API not
+    // enabled), and it must fail the capture rather than ship as a screenshot.
+    const keyRejected = await page.evaluate(() => Boolean(document.querySelector('.gm-err-container')) || /can't load Google Maps correctly/i.test(document.body?.innerText ?? ''));
+    if (keyRejected) {
+        throw new Error(
+            'Google Maps rejected the API key for this origin ("This page can\'t load Google Maps correctly"). ' +
+                'Allow the referrers http://proxy/* and http://localhost/* on the key, and make sure the Maps ' +
+                'JavaScript API is enabled with billing. See README → Google Maps variants.'
+        );
+    }
 }
 
 /**
