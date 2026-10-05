@@ -182,6 +182,15 @@ jobs:
           CAPTURE_DEBUG: '1'
         run: ./scripts/capture.sh ${{ steps.cfg.outputs.areas }}
 
+      # The capture container runs as root and writes into the bind-mounted capture/, so
+      # everything it produced — out/<area>/, .cache/tiles/ — is root-owned on the host.
+      # Every later step runs as the runner user, and the ones that only read (artifact
+      # upload, tile-cache save) are fine; compare is not, because it writes a diff/ directory
+      # beside the captures. Hand the output back rather than fixing it at each symptom.
+      - name: Take ownership of the capture output
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" capture/out capture/.cache 2>/dev/null || true
+
       # Unconditional: when a run fails partway, the screenshots it did manage are the fastest
       # way to see how far it got and what the failing screen looked like.
       - name: Save map tile cache
