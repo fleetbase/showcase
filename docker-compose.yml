@@ -91,21 +91,33 @@ services:
 
   # The API image carries a HEALTHCHECK that probes its HTTP server. These two containers
   # replace the entrypoint with a worker and never listen, so the inherited check can only
-  # ever fail — and `up --wait` would abort on it. Disable rather than invent a new probe:
-  # if the queue dies, provisioning fails on its own with a far more legible error.
+  # ever fail. It cannot simply be disabled either: `docker compose up --wait` refuses a
+  # service whose healthcheck is `disable: true` — "container … has no healthcheck
+  # configured", exit 1 — even with every container up. That is exactly how the first CI run
+  # died, and it had been failing locally too, hidden behind a `| tail`.
+  #
+  # So each gets a trivial check that passes as soon as the process is running. That is not a
+  # lie about their health: provisioning exercises both workers and fails loudly on its own if
+  # either is broken, with a far more legible error than a healthcheck could give.
   queue:
     <<: *api
     command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=120"]
     environment: *api-env
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 1
 
   scheduler:
     <<: *api
     command: ["go-crond", "--verbose", "root:./crontab"]
     environment: *api-env
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 1
 
   socket:
     image: socketcluster/socketcluster:v17.4.0
