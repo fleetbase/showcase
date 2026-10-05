@@ -153,7 +153,14 @@ jobs:
           restore-keys: |
             tiles-
 
+      # continue-on-error, deliberately. One screen whose selector broke must not cost the
+      # other ninety-five their pull request — the point of the automation is that a release
+      # refreshes the library without anyone babysitting it. The run still goes red: the last
+      # step in the job fails on this step's outcome, after the PR has been opened, and the
+      # PR body lists what is missing from it.
       - name: Capture
+        id: capture
+        continue-on-error: true
         env:
           SHOWCASE_PASSWORD: ${{ secrets.SHOWCASE_PASSWORD }}
           # Saves each screen's HTML into the artifact alongside the image, for diagnosing a
@@ -242,6 +249,21 @@ jobs:
           path: capture/.cache/domhash
           key: ${{ steps.domhash-cache.outputs.cache-primary-key }}
 
+      - name: Collect capture failures
+        if: steps.cfg.outputs.open_pr == 'true'
+        id: failures
+        run: |
+          set -euo pipefail
+          {
+            echo 'list<<CAPTURE_FAILURES_EOF'
+            for area in ${{ steps.cfg.outputs.areas }}; do
+              f="capture/out/$area/failures.json"
+              [ -s "$f" ] || continue
+              node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).forEach((r) => console.log('- ' + process.argv[2] + '/' + r.id + ' — ' + String(r.message || '').slice(0, 160)))" "$f" "$area"
+            done
+            echo CAPTURE_FAILURES_EOF
+          } >> "$GITHUB_OUTPUT"
+
       - name: Open the pull request
         if: steps.cfg.outputs.open_pr == 'true' && steps.compare.outputs.changed != '0'
         uses: peter-evans/create-pull-request@v8
@@ -264,3 +286,14 @@ jobs:
             Review these on the Vercel preview rather than in the binary diff. Files without a
             suffix are dark, matching the existing library; `-light.webp` files are new and
             nothing on the site consumes them yet.
+
+            ${{ steps.failures.outputs.list != '' && '**Not in this pull request.** These screens failed to capture:' || '' }}
+            ${{ steps.failures.outputs.list }}
+
+      # Last, so it cannot stop the pull request being opened: the run goes red whenever a
+      # screen failed, which is what gets someone to look at the debug HTML in the artifact.
+      - name: Fail the run if any screen failed to capture
+        if: always() && steps.capture.outcome == 'failure'
+        run: |
+          echo "::error::The capture step reported failures; see the log and the debug HTML in the artifact."
+          exit 1

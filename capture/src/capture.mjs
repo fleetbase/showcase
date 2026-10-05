@@ -108,6 +108,17 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                 page.on('dialog', (dialog) => dialog.accept().catch(() => {}));
                 return page;
             };
+
+            // Boot at the console root and settle the theme. The session lives in localStorage
+            // via an init script, but the app only picks it up on a real boot — a page handed
+            // straight to a deep link renders the sign-in screen, which is exactly what the
+            // entry after a failure captured once the loop started replacing pages.
+            const bootPage = async (page) => {
+                await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+                await waitForBoot(page);
+                return ensureTheme(page, theme);
+            };
+
             let page = await newPage();
 
             // Boot once against the console root before capturing anything. This pays for the
@@ -119,9 +130,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
             // and on an emulated amd64 browser it does not finish in 30s. Leaving it at the
             // default made the whole run fail on its very first goto while every later navigation
             // had 45s.
-            await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
-            await waitForBoot(page);
-            const themeResult = await ensureTheme(page, theme);
+            const themeResult = await bootPage(page);
             log(`theme "${theme}" active${themeResult.repaired ? ' (repaired via persisted option)' : ''}`);
 
             for (const entry of manifest.entries) {
@@ -179,6 +188,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                     // substate — the next entry does not inherit it.
                     await page.close().catch(() => {});
                     page = await newPage();
+                    await bootPage(page).catch(() => {});
                     continue;
                 }
             }

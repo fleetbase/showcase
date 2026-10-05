@@ -192,6 +192,10 @@ async function main() {
     await writeFile(path.join(outDir, 'resolved-ids.json'), `${JSON.stringify(ids, null, 2)}\n`);
 
     const failedIds = [...new Set([...Object.keys(resolveFailures), ...failures.map((f) => f.id)])];
+
+    // The workflow reads this to say in the pull request which screens are missing from it.
+    await writeFile(path.join(outDir, 'failures.json'), `${JSON.stringify([...Object.entries(resolveFailures).map(([id, message]) => ({ id, message })), ...failures], null, 2)}\n`);
+
     console.log(
         `\n${failedIds.length ? '✖' : '✔'} wrote ${captured.length} file(s) to ${outDir}${failedIds.length ? `; ${failedIds.length} entr${failedIds.length === 1 ? 'y' : 'ies'} failed` : ''}`
     );
