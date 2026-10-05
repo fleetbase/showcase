@@ -15,6 +15,7 @@
 //
 // --dry-run reports without copying anything.
 
+import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -78,7 +79,17 @@ async function main() {
     const changedRatio = Number(values['changed-ratio']);
 
     const results = [];
-    const nextBaseline = { ...baseline };
+    // The baseline maps an image's CONTENT (sha256 of the .webp bytes) to the DOM hash of the
+    // capture that produced it. Keyed that way, "render noise" can only be declared about the
+    // file that is actually published: if the image on fleetbase.io is one this pipeline
+    // captured, we know its DOM; if it is hand-made, or the capture that produced it never
+    // merged, there is no entry and the decision falls back to pixels alone.
+    //
+    // It used to be keyed by entry id and recorded on every run, published or not — so a
+    // second run before the pull request merged compared against a DOM the site never had,
+    // and dropped 18 genuine updates from the v0.7.68 pull request as "render noise".
+    const sha = (buffer) => createHash('sha256').update(buffer).digest('hex');
+    const nextBaseline = {};
 
     for (const capture of captures.captured) {
         if (capture.provider === 'google' && !values['include-google']) {
@@ -90,17 +101,20 @@ async function main() {
 
         const comparison = await comparePair(nextBuffer, currentBuffer, { pixelThreshold, changedRatio });
 
-        const hashKey = `${capture.id}:${capture.theme}`;
+        const publishedSha = currentBuffer ? sha(currentBuffer) : null;
+        const hashBefore = publishedSha ? baseline[publishedSha] : undefined;
         const verdict = decide({
             status: comparison.status,
             pixelChanged: comparison.status === 'changed',
-            hashBefore: baseline[hashKey],
+            hashBefore,
             hashAfter: capture.hash,
         });
 
-        // Record the hash whether or not the file shipped. Recording only on publish would
-        // make the next run compare against a hash two changes old.
-        if (capture.hash) nextBaseline[hashKey] = capture.hash;
+        // Keep what the next run can use: the DOM behind the file published now, and the DOM
+        // behind this capture — which becomes the published file if this run's pull request
+        // merges. Entries for captures that were superseded before merging drop out here.
+        if (publishedSha && hashBefore) nextBaseline[publishedSha] = hashBefore;
+        if (capture.hash) nextBaseline[sha(nextBuffer)] = capture.hash;
 
         results.push({
             id: capture.id,
@@ -112,7 +126,7 @@ async function main() {
             changedPixels: comparison.changedPixels,
             dimensions: comparison.dimensions,
             previousDimensions: comparison.previousDimensions,
-            hashBefore: baseline[hashKey] ?? null,
+            hashBefore: hashBefore ?? null,
             hashAfter: capture.hash ?? null,
             included: verdict.include,
             reason: verdict.reason,
