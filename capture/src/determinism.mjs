@@ -352,14 +352,71 @@ const GEOIP_FIXTURES = {
     },
 };
 
+// The browser clock is pinned to FROZEN_TIME, but the server's is not. Ledger's report and
+// dashboard endpoints default their period to the server's "now" whenever the page sends no
+// dates — and several widgets and report pages send none — so without this the AR aging would
+// put every fixture invoice in the 90+ bucket, and the books would read differently each month.
+// Fill in only the parameters the request left out, at the fixture date, so the server computes
+// exactly what the browser believes today is. Parameter names are Ledger's ReportController's.
+const REPORT_DATES = {
+    as_of_date: '2026-01-20',
+    start_date: '2025-09-01',
+    end_date: '2026-01-20',
+    date_from: '2025-09-01',
+    date_to: '2026-01-20',
+};
+const PINNED_REPORT_PATHS = /\/ledger\/int\/v1\/reports\//;
+
+function pinReportDates(url) {
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return null;
+    }
+    if (!PINNED_REPORT_PATHS.test(parsed.pathname)) return null;
+    let changed = false;
+    for (const [key, value] of Object.entries(REPORT_DATES)) {
+        if (!parsed.searchParams.has(key)) {
+            parsed.searchParams.set(key, value);
+            changed = true;
+        }
+    }
+    return changed ? parsed.toString() : null;
+}
+
+/** The /storage/... path of an APP_URL (http://localhost) upload URL, else null. */
+export function appStoragePath(url) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname !== 'localhost' || !parsed.pathname.startsWith('/storage/')) return null;
+        return parsed.pathname + parsed.search;
+    } catch {
+        return null;
+    }
+}
+
 export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlocked, mapProvider = 'leaflet' }) {
     await page.route('**/*', async (route) => {
         const request = route.request();
         const url = request.url();
 
         if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
-        if (isLocalOrigin(url, { baseUrl, apiHost })) return route.continue();
+        if (isLocalOrigin(url, { baseUrl, apiHost })) {
+            const pinned = pinReportDates(url);
+            return pinned ? route.continue({ url: pinned }) : route.continue();
+        }
         if (mapProvider === 'google' && GOOGLE_MAPS_HOSTS.test(hostnameOf(url))) return route.continue();
+
+        // Uploaded files (product photos, extension icons) come back as APP_URL/storage/...,
+        // and APP_URL is http://localhost — the origin a developer's browser uses. Inside CI the
+        // capture browser reaches the same proxy as http://proxy, so localhost is a foreign
+        // origin there. Fetch the same path from the stack instead.
+        const storagePath = appStoragePath(url);
+        if (storagePath && baseUrl) {
+            const response = await route.fetch({ url: new URL(storagePath, baseUrl).toString() });
+            return route.fulfill({ response });
+        }
 
         const geoip = GEOIP_FIXTURES[hostnameOf(url)];
         if (geoip) {

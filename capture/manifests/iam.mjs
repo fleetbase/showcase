@@ -55,5 +55,24 @@ export default {
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 5 },
         },
+        // ── Create dialogs ────────────────────────────────────────────────────────────
+        // Interaction only: each opens from a button in the list header.
+        ...[
+            ['user-create', 'iam-user-create', '/iam/users', /^\s*new\s*$/i],
+            ['user-invite', 'iam-user-invite', '/iam/users', /invite/i],
+            ['group-create', 'iam-group-create', '/iam/groups', /^\s*new\s*$/i],
+            ['role-create', 'iam-role-create', '/iam/roles', /^\s*new\s*$/i],
+            ['policy-create', 'iam-policy-create', '/iam/policies', /^\s*new\s*$/i],
+        ].map(([id, file, url, button]) => ({
+            id,
+            file,
+            url,
+            waitFor: TABLE,
+            interact: async (page) => {
+                await page.getByRole('button', { name: button }).first().click();
+            },
+            waitForAfterInteract: '.modal-dialog, .modal-content, .ember-modal-dialog, [role="dialog"]:not(.next-content-overlay), .next-content-overlay.is-open .next-content-overlay-panel',
+            extraSettleMs: 1000,
+        })),
     ],
 };

@@ -30,12 +30,14 @@ class ShowcaseSeeder extends Seeder
      */
     protected const AREAS = [
         Organization\OrganizationSeeder::class,
-        General\GeneralSeeder::class,
         Iam\IamSeeder::class,
         FleetOps\FleetOpsSeeder::class,
+        // After IAM and Fleet-Ops: the chat and notifications name users they create.
+        General\GeneralSeeder::class,
         Developers\DevelopersSeeder::class,
         Storefront\StorefrontSeeder::class,
         Ledger\LedgerSeeder::class,
+        Extensions\ExtensionsSeeder::class,
     ];
 
     public function run(): void

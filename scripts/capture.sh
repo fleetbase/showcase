@@ -91,6 +91,22 @@ SEEDED_FIXTURES="$(cat .seeded-fixtures.json 2>/dev/null || true)"
 GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-$(grep '^GOOGLE_MAPS_API_KEY=' .env 2>/dev/null | cut -d= -f2- || true)}"
 
 # Flip the live map provider for the showcase organization; see scripts/map-provider.php.
+# Switch the owner between an ordinary user and a system admin; see scripts/user-type.php.
+set_user_type() {
+    local type="$1"
+    local code out
+    code="$(base64 < scripts/user-type.php | tr -d '\n')"
+    out="$(docker compose exec -T \
+        -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Pte Ltd}" \
+        -e "SHOWCASE_USER_TYPE=${type}" \
+        application php artisan tinker --execute="eval(base64_decode('${code}'));" 2>&1 || true)"
+    printf '%s\n' "$out" | grep -E '^USER_TYPE' || true
+    if ! printf '%s\n' "$out" | grep -q "^USER_TYPE=${type}$"; then
+        echo "::error::Could not switch the showcase owner to ${type}."
+        return 1
+    fi
+}
+
 set_map_provider() {
     local provider="$1"
     local code out
@@ -187,8 +203,21 @@ capture_area() {
         '
 }
 
+# One area failing must not stop the rest: each area's failures.json is what the workflow reads
+# into the PR body, and an area that never ran has none. Collect and fail once at the end.
+FAILED_AREAS=()
 for area in "${AREAS[@]}"; do
-    capture_area "$area" leaflet
+    if [[ "$area" == "admin" ]]; then
+        # Admin screens need a system admin. Restore on any exit: an owner left as admin would
+        # put the admin console's extra navigation into every later area's screenshots.
+        set_user_type admin
+        trap 'set_user_type user >/dev/null 2>&1 || true' EXIT
+        capture_area "$area" leaflet || FAILED_AREAS+=("$area")
+        set_user_type user
+        trap - EXIT
+        continue
+    fi
+    capture_area "$area" leaflet || FAILED_AREAS+=("$area")
 done
 
 if [[ -n "$GOOGLE_MAPS_API_KEY" ]]; then
@@ -199,7 +228,7 @@ if [[ -n "$GOOGLE_MAPS_API_KEY" ]]; then
     # Leaflet run capture Google tiles under Leaflet file names.
     trap 'set_map_provider leaflet >/dev/null 2>&1 || true' EXIT
     for area in "${AREAS[@]}"; do
-        capture_area "$area" google
+        capture_area "$area" google || FAILED_AREAS+=("${area} (google)")
     done
     set_map_provider leaflet
     trap - EXIT
@@ -209,4 +238,8 @@ else
 fi
 
 echo
+if [[ ${#FAILED_AREAS[@]} -gt 0 ]]; then
+    echo "::error::Areas with failed captures: ${FAILED_AREAS[*]}"
+    exit 1
+fi
 echo "✔ Captured: ${AREAS[*]}"

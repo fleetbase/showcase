@@ -17,7 +17,7 @@ AREA="${1:-all}"
 # A case statement rather than an associative array: macOS ships bash 3.2, which has no
 # `declare -A`, and this script has to behave identically on a developer's Mac and on an
 # ubuntu-latest runner.
-AREAS="all organization general iam fleet-ops developers storefront ledger"
+AREAS="all organization general iam fleet-ops developers storefront ledger extensions"
 case "$AREA" in
     all)          CLASS='Database\Seeders\Showcase\ShowcaseSeeder' ;;
     organization) CLASS='Database\Seeders\Showcase\Organization\OrganizationSeeder' ;;
@@ -26,6 +26,7 @@ case "$AREA" in
     fleet-ops)    CLASS='Database\Seeders\Showcase\FleetOps\FleetOpsSeeder' ;;
     developers)   CLASS='Database\Seeders\Showcase\Developers\DevelopersSeeder' ;;
     storefront)   CLASS='Database\Seeders\Showcase\Storefront\StorefrontSeeder' ;;
+    extensions)   CLASS='Database\Seeders\Showcase\Extensions\ExtensionsSeeder' ;;
     ledger)       CLASS='Database\Seeders\Showcase\Ledger\LedgerSeeder' ;;
     *)
         echo "::error::unknown area '${AREA}'. One of: ${AREAS}"

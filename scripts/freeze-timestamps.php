@@ -50,6 +50,29 @@ try {
         ->where('uuid', $company->uuid)
         ->update(['created_at' => $frozen, 'updated_at' => $frozen]);
 
+    // The IAM policies list prints a Created column, and the system policies and roles are
+    // written by `fleetbase:create-permissions` at provision time — wall-clock values that
+    // made iam-policies-list differ on every run. Every row, not just the organization's: the
+    // stack is throwaway and the system rows have no company.
+    $iam = 0;
+    foreach (['policies', 'roles', 'permissions'] as $table) {
+        if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
+            $iam += \Illuminate\Support\Facades\DB::table($table)->update(['created_at' => $frozen, 'updated_at' => $frozen]);
+        }
+    }
+
+    // The wallet details panel prints Created and Last Updated; Ledger provisions company
+    // wallets at run time.
+    $wallets = \Illuminate\Support\Facades\Schema::hasTable('ledger_wallets')
+        ? \Illuminate\Support\Facades\DB::table('ledger_wallets')->where('company_uuid', $company->uuid)->update(['created_at' => $frozen, 'updated_at' => $frozen])
+        : 0;
+
+    // The dashboard's Recent IAM Activity widget prints activity timestamps, and seeding
+    // users and roles writes activity rows at wall-clock time. Every row: throwaway stack.
+    $activity = \Illuminate\Support\Facades\Schema::hasTable('activity')
+        ? \Illuminate\Support\Facades\DB::table('activity')->update(['created_at' => $frozen->copy()->subHours(3), 'updated_at' => $frozen->copy()->subHours(3)])
+        : 0;
+
     // The opposite direction for drivers: their location age is measured against the SERVER
     // clock (TrackingContextBuilder: now() - drivers.updated_at), and nothing rendered reads
     // drivers.updated_at itself, so every driver is touched to real now — the offline one
@@ -74,6 +97,9 @@ try {
     echo PHP_EOL . 'FROZEN_USERS=' . $users . PHP_EOL;
     echo 'FRESHENED_TRAILERS=' . $trailers . PHP_EOL;
     echo 'FROZEN_COMPANIES=' . $companies . PHP_EOL;
+    echo 'FROZEN_IAM=' . $iam . PHP_EOL;
+    echo 'FROZEN_WALLETS=' . $wallets . PHP_EOL;
+    echo 'FROZEN_ACTIVITY=' . $activity . PHP_EOL;
     echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'FREEZE_ERROR=' . $e->getMessage() . PHP_EOL;

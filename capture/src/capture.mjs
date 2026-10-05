@@ -24,6 +24,8 @@ const NAV_TIMEOUT = Number(process.env.CAPTURE_NAV_TIMEOUT_MS ?? 120_000);
 // Generous: the slowest legitimate entry (first engine load on emulated amd64, a map with
 // tiles, a 3s settle) finishes well inside two minutes.
 const ENTRY_DEADLINE_MS = Number(process.env.CAPTURE_ENTRY_DEADLINE_MS ?? 240_000);
+// Cap on each failure-recovery step (debug dump, closing the page).
+const RECOVERY_MS = 15_000;
 
 function withDeadline(promise, ms, message) {
     let timer;
@@ -141,6 +143,14 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                 // deadline. The individual waits have their own timeouts, but a navigation
                 // that never completes has none that fires, and this is the only guard
                 // between "one screen is stuck" and "the job is stuck".
+                // entry.cleanup(page) undoes server-side state an interaction left behind (a
+                // dashboard switch persists, and would leak into every later screen). Runs
+                // after the shot and after a failure, never fatally.
+                const runCleanup = async () => {
+                    if (typeof entry.cleanup !== 'function') return;
+                    await withDeadline(entry.cleanup(page), RECOVERY_MS, 'cleanup hung').catch((e) => log(`  cleanup for ${entry.id} failed: ${e.message.split('\n')[0]}`));
+                };
+
                 const captureEntry = async () => {
                     if (entry.viewport) await page.setViewportSize(entry.viewport);
                     await page.goto(`${baseUrl}${url}`, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
@@ -162,6 +172,7 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                         await mkdir(debugDir, { recursive: true });
                         await writeFile(path.join(debugDir, `${entry.id}-${theme}.html`), await page.content());
                     }
+                    await runCleanup();
                     captured.push({ id: entry.id, file, theme, hash, bytes: webp.length, url, provider: mapProvider });
                     log(`captured ${file} (${(webp.length / 1024).toFixed(0)} KB) from ${url}`);
                     if (entry.viewport) await page.setViewportSize(manifest.viewport);
@@ -170,23 +181,27 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                 try {
                     await withDeadline(captureEntry(), ENTRY_DEADLINE_MS, `[${entry.id}] exceeded the ${ENTRY_DEADLINE_MS / 1000}s entry deadline`);
                 } catch (error) {
-                    // The screen that failed is the one whose DOM matters most, and it is the
-                    // one the success path never saves.
-                    if (process.env.CAPTURE_DEBUG) {
-                        const debugDir = path.join(outDir, 'debug');
-                        await mkdir(debugDir, { recursive: true });
-                        const html = await page.content().catch(() => '');
-                        await writeFile(path.join(debugDir, `${entry.id}-${theme}-FAILED.html`), html);
-                    }
                     // Keep going. A batch of twenty new entries with unverified selectors
                     // would otherwise take twenty CI runs to debug; recording the failure and
                     // moving on makes it one run. bin/capture.mjs still exits non-zero.
+                    await runCleanup();
                     failures.push({ id: entry.id, theme, url, message: error.message.split('\n')[0] });
                     log(`FAILED ${entry.id} (${theme}): ${error.message.split('\n')[0]}`);
 
+                    // The screen that failed is the one whose DOM matters most, and it is the
+                    // one the success path never saves. Bounded: on a renderer stuck in a JS
+                    // loop, page.content() and page.close() have no timeout of their own —
+                    // storefront settings-locations turned a 240s deadline into 16 minutes.
+                    if (process.env.CAPTURE_DEBUG) {
+                        const debugDir = path.join(outDir, 'debug');
+                        await mkdir(debugDir, { recursive: true });
+                        const html = await withDeadline(page.content(), RECOVERY_MS, 'page.content() hung').catch(() => '');
+                        await writeFile(path.join(debugDir, `${entry.id}-${theme}-FAILED.html`), html);
+                    }
+
                     // Whatever state the page is in — mid-navigation, dialog up, Ember error
                     // substate — the next entry does not inherit it.
-                    await page.close().catch(() => {});
+                    await withDeadline(page.close(), RECOVERY_MS, 'page.close() hung').catch(() => {});
                     page = await newPage();
                     await bootPage(page).catch(() => {});
                     continue;
