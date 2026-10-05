@@ -436,6 +436,7 @@ trait SeedsStorefrontFixtures
         ], true);
 
         $product->primary_image_uuid = $file->uuid;
+        $product->timestamps         = false; // keep the fixture updated_at
         Product::withoutEvents(fn () => $product->save());
     }
 

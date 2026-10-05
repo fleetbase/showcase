@@ -48,9 +48,15 @@ export default {
             // shows every section filled in.
             id: 'product-edit',
             file: 'storefront-product-edit',
-            fromSeed: true,
-            url: ({ publicId }) => `/storefront/products/${publicId}`,
-            waitFor: PANEL_OR_MAIN,
+            // Not addressed by URL: /storefront/products/<public_id> is ambiguous between the
+            // edit route and the category route (both one dynamic segment), and a cold load
+            // resolves it as a category. Clicking the card's edit action routes by name.
+            url: '/storefront/products',
+            waitFor: '.storefront-product-card',
+            interact: async (p) => {
+                await p.locator('.storefront-product-card__quick-actions a[aria-label="Edit Orchard Fruit Box"]').first().click();
+            },
+            waitForAfterInteract: '.next-content-overlay.is-open .next-content-overlay-panel',
             extraSettleMs: 2000,
         },
         {

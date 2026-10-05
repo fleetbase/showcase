@@ -140,7 +140,10 @@ class ExtensionsSeeder extends Seeder
 
             $icon = $this->attachIcon($publisher, $extension, $slug);
 
+            // timestamps off: a plain save stamps updated_at with the wall clock, and the cards
+            // print it as "Last modified".
             $extension->forceFill(['current_bundle_uuid' => $bundle->uuid, 'icon_uuid' => $icon?->uuid]);
+            $extension->timestamps = false;
             RegistryExtension::withoutEvents(fn () => $extension->save());
 
             if ($installed) {

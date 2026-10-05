@@ -87,12 +87,20 @@ class LedgerSeeder extends Seeder
      */
     protected function operatingWallet(): ?Wallet
     {
+        // Ledger provisions company wallets lazily, on first use — measured: the Operating
+        // Wallet in the capture was created during the capture, after seeding, so the seeder
+        // had looked up (and announced) whichever wallet existed then. Provision them here,
+        // through Ledger's own idempotent firstOrCreate.
+        app(\Fleetbase\Ledger\Services\WalletService::class)->provisionCompanyWallets($this->company);
+
         $wallets = Wallet::where('company_uuid', $this->company->uuid);
         $wallet  = (clone $wallets)->where('name', 'Operating Wallet')->first() ?? $wallets->orderBy('created_at')->first();
 
+        // Provisioning takes the company's currency; if the company had none yet it fell back
+        // to USD. Align an empty wallet with the books. A query update: no events, no casts.
         if ($wallet && $wallet->currency !== $this->currency && (int) $wallet->getRawOriginal('balance') === 0) {
-            $wallet->forceFill(['currency' => $this->currency]);
-            Wallet::withoutEvents(fn () => $wallet->saveQuietly());
+            Wallet::where('uuid', $wallet->uuid)->update(['currency' => $this->currency]);
+            $wallet->refresh();
         }
 
         return $wallet;

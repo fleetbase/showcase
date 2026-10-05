@@ -385,6 +385,17 @@ function pinReportDates(url) {
     return changed ? parsed.toString() : null;
 }
 
+/** The /storage/... path of an APP_URL (http://localhost) upload URL, else null. */
+export function appStoragePath(url) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname !== 'localhost' || !parsed.pathname.startsWith('/storage/')) return null;
+        return parsed.pathname + parsed.search;
+    } catch {
+        return null;
+    }
+}
+
 export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlocked, mapProvider = 'leaflet' }) {
     await page.route('**/*', async (route) => {
         const request = route.request();
@@ -396,6 +407,16 @@ export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlock
             return pinned ? route.continue({ url: pinned }) : route.continue();
         }
         if (mapProvider === 'google' && GOOGLE_MAPS_HOSTS.test(hostnameOf(url))) return route.continue();
+
+        // Uploaded files (product photos, extension icons) come back as APP_URL/storage/...,
+        // and APP_URL is http://localhost — the origin a developer's browser uses. Inside CI the
+        // capture browser reaches the same proxy as http://proxy, so localhost is a foreign
+        // origin there. Fetch the same path from the stack instead.
+        const storagePath = appStoragePath(url);
+        if (storagePath && baseUrl) {
+            const response = await route.fetch({ url: new URL(storagePath, baseUrl).toString() });
+            return route.fulfill({ response });
+        }
 
         const geoip = GEOIP_FIXTURES[hostnameOf(url)];
         if (geoip) {

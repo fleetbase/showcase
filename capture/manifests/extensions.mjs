@@ -49,6 +49,9 @@ export default {
             waitForAfterInteract: DIALOG,
             extraSettleMs: 1000,
         },
-        { id: 'purchased', file: 'extensions-purchased-list', url: '/extensions/purchased', waitFor: MAIN, extraSettleMs: 2000 },
+        // extensions-purchased-list is deliberately not captured. registry-bridge's
+        // purchased.hbs passes @extension to <ExtensionCard>, which reads @resource, so every
+        // purchased card renders blank ("Free", no name) in v0.7.68 — capturing it would
+        // replace the published image with a broken one. Restore once that is fixed upstream.
     ],
 };
