@@ -134,17 +134,34 @@ async function main() {
     }
     entries = entries.filter((entry) => !(entry.id in resolveFailures));
 
-    // DemoSeeder echoes this so two independent paths have to agree on which record a detail
-    // page is showing. Optional — absent locally, present in CI.
+    // The seeders echo SEEDED_FIXTURES so two independent paths have to agree on which record a
+    // detail page is showing. Optional — absent locally, present in CI.
+    let seeded = {};
     if (process.env.SEEDED_FIXTURES) {
         try {
-            assertFixturesAgree(ids, JSON.parse(process.env.SEEDED_FIXTURES));
+            seeded = JSON.parse(process.env.SEEDED_FIXTURES);
+            assertFixturesAgree(ids, seeded);
             log('resolved ids agree with SEEDED_FIXTURES');
         } catch (error) {
             console.error(`::error::${error.message}`);
             process.exit(1);
         }
     }
+
+    // `fromSeed: true` takes the id straight from what the seeder announced, for records the
+    // internal API cannot look up by a stable field (webhook endpoints have no index route
+    // and are addressed by uuid). Missing from the seed output means the seeder did not run —
+    // the entry is reported as failed rather than navigated to with an undefined id.
+    for (const entry of entries) {
+        if (!entry.fromSeed) continue;
+        if (seeded[entry.id]) {
+            ids[entry.id] = seeded[entry.id];
+        } else {
+            resolveFailures[entry.id] = `fromSeed: no "${entry.id}" in SEEDED_FIXTURES`;
+            log(`FAILED ${entry.id}: ${resolveFailures[entry.id]}`);
+        }
+    }
+    entries = entries.filter((entry) => !(entry.id in resolveFailures));
 
     const tileCache = new TileCache({
         dir: path.resolve(values['cache-dir'], 'tiles'),
