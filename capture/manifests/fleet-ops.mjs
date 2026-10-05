@@ -30,8 +30,6 @@
 //                                wrong or the feature moved. The API does serve
 //                                /int/v1/fuel-reports and /int/v1/issues with 2 rows each,
 //                                so the fixtures exist; only the console path is unknown.
-//   fleet-ops-order-details      /fleet-ops/<public_id> redirects to the orders index, so
-//                                this would have published the list under a details name.
 //   fleet-ops-orchestrator-1     Captures non-deterministically: its `main` fallback selector
 //                                lets the capture land before the metrics load, and the file
 //                                swung between 56 KB and 158 KB across runs. Needs a real
@@ -73,6 +71,68 @@ export default {
 
     entries: [
         // ── Operations ──────────────────────────────────────────────────────────────────
+        //
+        // The three entries the monorepo README leads with. Their selectors are PROVISIONAL
+        // until confirmed on a running stack (see the header).
+        {
+            id: 'live-orders-panel',
+            file: 'fleet-ops-live-orders-panel',
+            // The orders index opens on the Map view: a Leaflet map with the active orders
+            // listed in the side panel. The panel is NOT open by default — its state lives in
+            // the app-cache localStorage bucket, which the capture wipes on every boot for
+            // determinism — so open it from the toolbar the way an operator does.
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container',
+            interact: async (page) => {
+                await page.locator('#map-toolbar-view-orders-button').click();
+            },
+            // The Overlay puts `is-open` on its root and the caller's class on the inner
+            // panel, so the two never sit on one element.
+            waitForAfterInteract: '.next-content-overlay.is-open .orders-panel',
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'orders-kanban',
+            file: 'fleet-ops-orders-kanban',
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container, main',
+            // Board view groups orders by activity, one column per step of the order config's
+            // flow — which is why the last-mile fixtures exist: five statuses is five thin
+            // columns, ten is a board.
+            //
+            // The board only groups by a config's flow once that config is chosen in its
+            // "Select Order Type" filter; with none chosen it shows the generic columns
+            // (Created / Dispatched / Started / Completed) with every order in Created.
+            interact: async (page) => {
+                await page.getByRole('button', { name: 'Board' }).first().click();
+                await page.locator('.order-board-type-filter').first().click();
+                await page.locator('.ember-power-select-option', { hasText: 'Last-Mile Delivery' }).first().click();
+            },
+            // A column that only the last-mile flow has. Column titles are
+            // titleize(humanize(status)), hence the loose match.
+            waitForAfterInteract: 'text=/enroute dropoff/i',
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'multi-waypoint-order',
+            file: 'fleet-ops-multi-waypoint-order',
+            // FLT-2007: picked up, three stops, driver and vehicle assigned, mid-route. The
+            // details view is a panel over the map, so the route and the activity timeline
+            // both render.
+            resolve: {
+                resource: 'orders',
+                query: 'FLT-2007',
+                match: { field: 'internal_id', value: 'FLT-2007' },
+            },
+            url: ({ publicId }) => `/fleet-ops/${publicId}`,
+            // The details panel is an Overlay that slides in once the order resolves; waiting
+            // only for the map captured the route with no panel at all. Require the panel to
+            // be open so a failed order load is a failed capture, not a wrong one.
+            waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
+            map: { settleTiles: true },
+            extraSettleMs: 3000,
+        },
         {
             id: 'orders-table-list',
             file: 'fleet-ops-orders-table-list',
@@ -99,6 +159,37 @@ export default {
             url: '/fleet-ops/order-config',
             waitFor: '.order-config-container, [data-test-id="order-config"], main',
             extraSettleMs: 400,
+        },
+        {
+            id: 'order-config-activity-flow',
+            file: 'fleet-ops-order-config-activity-flow',
+            url: '/fleet-ops/order-config',
+            waitFor: 'main',
+            // Select the seeded Last-Mile Delivery config, then open its Activity Flow tab —
+            // the node graph of the ten-step flow OrderConfigSeeder defines.
+            //
+            // Selectors from the engine template (addon/templates/operations/order-config.hbs):
+            // the picker is a DropdownButton with class .order-config-select-button whose
+            // items are a.next-dd-item, and the tabs are .fleetops-pill-tabs .ui-tab with the
+            // title in a <span>. The tabs do not exist until a config is selected — the first
+            // attempt clicked a role=button named "Activity Flow" before selecting anything,
+            // and timed out on a tab that was not there.
+            interact: async (page) => {
+                await page.locator('.order-config-select-button').first().click();
+                await page.locator('a.next-dd-item', { hasText: 'Last-Mile Delivery' }).first().click();
+                await page
+                    .locator('.fleetops-pill-tabs .ui-tab', { hasText: /activity flow/i })
+                    .first()
+                    .click();
+                // The editor opens at scale 1, where a ten-step flow shows three and a half
+                // nodes. zoomOut() steps the JointJS paper by 0.2 down to a floor of 0.2;
+                // three steps (0.4) shows most of the main path at a size that still reads.
+                const zoomOut = page.locator('.activity-flow-zoom-controls button').nth(1);
+                await zoomOut.waitFor({ state: 'visible' });
+                for (let i = 0; i < 3; i++) await zoomOut.click();
+            },
+            waitForAfterInteract: '.fleetops-pill-tabs .ui-tab.active',
+            extraSettleMs: 2500,
         },
         {
             id: 'service-rate-list',

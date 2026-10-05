@@ -60,8 +60,7 @@ async function main() {
     const imageTag = process.env.PLAYWRIGHT_IMAGE_TAG;
     if (imageTag && !imageTag.includes(PLAYWRIGHT_VERSION)) {
         console.error(
-            `::error::PLAYWRIGHT_IMAGE_TAG (${imageTag}) does not match the pinned playwright ` +
-                `${PLAYWRIGHT_VERSION}. Captures from mismatched Chromium builds are not comparable.`
+            `::error::PLAYWRIGHT_IMAGE_TAG (${imageTag}) does not match the pinned playwright ` + `${PLAYWRIGHT_VERSION}. Captures from mismatched Chromium builds are not comparable.`
         );
         process.exit(1);
     }
@@ -99,8 +98,7 @@ async function main() {
     //
     // So the order has to be: log in once, freeze the timestamps, then capture with the token
     // already in hand.
-    const token =
-        process.env.SHOWCASE_TOKEN || (await login({ apiHost, namespace, identity, password })).token;
+    const token = process.env.SHOWCASE_TOKEN || (await login({ apiHost, namespace, identity, password })).token;
 
     // Fetched before the browser starts because the theme is persisted per user under
     // `<uuid>:theme`, and that persisted option is the only thing that beats the server's
@@ -151,15 +149,14 @@ async function main() {
         });
     } finally {
         await browser.close();
+        // On failure this is the only place the tile statistics are reported, and a blank
+        // basemap in the one screenshot that did come out is exactly when they are needed.
+        log(tileCache.summary());
     }
 
-    await writeFile(
-        path.join(outDir, 'captures.json'),
-        `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured }, null, 2)}\n`
-    );
+    await writeFile(path.join(outDir, 'captures.json'), `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured }, null, 2)}\n`);
     await writeFile(path.join(outDir, 'resolved-ids.json'), `${JSON.stringify(ids, null, 2)}\n`);
 
-    log(tileCache.summary());
     console.log(`\n✔ wrote ${captured.length} file(s) to ${outDir}`);
 }
 

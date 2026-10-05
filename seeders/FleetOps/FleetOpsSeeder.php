@@ -33,6 +33,7 @@ class FleetOpsSeeder extends Seeder
     protected const AREAS = [
         NetworkSeeder::class,
         FleetSeeder::class,
+        OrderConfigSeeder::class,
         OrdersSeeder::class,
         ConnectivitySeeder::class,
         MaintenanceSeeder::class,
@@ -64,6 +65,8 @@ class FleetOpsSeeder extends Seeder
             // FLT-1004 — the "started" order, which has a driver, a vehicle and a live route,
             // so its detail page renders with something on the map.
             'order-details' => $this->seededModel(Order::class, 'order_started')?->public_id,
+            // FLT-2007: the last-mile hero — three stops, mid-route, driver and vehicle assigned.
+            'multi-waypoint-order' => $this->seededModel(Order::class, 'lm_picked_up_1')?->public_id,
         ]);
     }
 

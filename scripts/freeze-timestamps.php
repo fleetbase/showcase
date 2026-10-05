@@ -50,8 +50,21 @@ try {
         ->where('uuid', $company->uuid)
         ->update(['created_at' => $frozen, 'updated_at' => $frozen]);
 
+    // The opposite direction for drivers: their location age is measured against the SERVER
+    // clock (TrackingContextBuilder: now() - drivers.updated_at), and nothing rendered reads
+    // drivers.updated_at itself, so every driver is touched to real now — the offline one
+    // too, or the one order assigned to her keeps a Stale GPS badge on the live panel. This
+    // is what turns "Driver stale · 262d" into a live signal. The age that the tracking
+    // footer prints will read a few minutes and vary slightly between runs; that is the one
+    // accepted source of drift, and it sits below the fold of the hero.
+    $drivers = \Illuminate\Support\Facades\DB::table('drivers')
+        ->where('company_uuid', $company->uuid)
+        ->whereNull('deleted_at')
+        ->update(['updated_at' => \Illuminate\Support\Carbon::now()]);
+
     echo PHP_EOL . 'FROZEN_USERS=' . $users . PHP_EOL;
     echo 'FROZEN_COMPANIES=' . $companies . PHP_EOL;
+    echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'FREEZE_ERROR=' . $e->getMessage() . PHP_EOL;
 }

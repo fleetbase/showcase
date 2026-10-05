@@ -18,6 +18,7 @@ use Fleetbase\FleetOps\Models\Contact;
 use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Entity;
 use Fleetbase\FleetOps\Models\Order;
+use Fleetbase\FleetOps\Models\OrderConfig;
 use Fleetbase\FleetOps\Models\Payload;
 use Fleetbase\FleetOps\Models\Place;
 use Fleetbase\FleetOps\Models\TrackingNumber;
@@ -48,6 +49,7 @@ class OrdersSeeder extends Seeder
         DB::transaction(function () use ($company) {
             $this->purgeSeedData();
             $this->seedOrders($company);
+            $this->seedLastMileOrders($company);
 
             $this->command?->info('Seeded ' . $this->seedName() . ' order fixtures for company: ' . $company->public_id);
         });
@@ -76,6 +78,23 @@ class OrdersSeeder extends Seeder
         'order_completed'          => 'FLT-1005',
         'order_canceled'           => 'FLT-1006',
         'order_vehicle_assigned'   => 'FLT-1007',
+        // Last-mile set — see seedLastMileOrders(). FLT-2007 is the multi-waypoint hero the
+        // README leads with; capture/manifests/fleet-ops.mjs resolves it by this value.
+        'lm_created_1'             => 'FLT-2001',
+        'lm_created_2'             => 'FLT-2002',
+        'lm_dispatched_1'          => 'FLT-2003',
+        'lm_dispatched_2'          => 'FLT-2004',
+        'lm_enroute_pickup'        => 'FLT-2005',
+        'lm_arrived_pickup'        => 'FLT-2006',
+        'lm_picked_up_1'           => 'FLT-2007',
+        'lm_picked_up_2'           => 'FLT-2008',
+        'lm_enroute_dropoff'       => 'FLT-2009',
+        'lm_arrived_dropoff'       => 'FLT-2010',
+        'lm_delivered_1'           => 'FLT-2011',
+        'lm_delivered_2'           => 'FLT-2012',
+        'lm_failed'                => 'FLT-2013',
+        'lm_returned'              => 'FLT-2014',
+        'lm_canceled'              => 'FLT-2015',
     ];
 
     /**
@@ -176,6 +195,154 @@ class OrdersSeeder extends Seeder
         }
     }
 
+    /**
+     * Orders on the Last-Mile Delivery config, one or two at every activity in its flow.
+     *
+     * This is what makes the order board and the live map worth screenshotting: the board's
+     * columns are the flow's activities, so a set that only reaches "started" is three columns
+     * and a lot of empty space. Each order also carries a tracking-status history for every
+     * step it has passed through, which is what the order details panel renders as the
+     * Activity timeline.
+     */
+    protected function seedLastMileOrders(Company $company): void
+    {
+        /** @var OrderConfig|null $config */
+        $config = $this->seededModel(OrderConfig::class, OrderConfigSeeder::CONFIG_SEED_ID);
+        if (!$config) {
+            $this->command?->warn('Last-Mile Delivery config not found; run OrderConfigSeeder first. Skipping last-mile orders.');
+
+            return;
+        }
+
+        $places = [];
+        foreach (['central_depot', 'west_depot', 'airport_hub', 'orchard_store', 'rochor_store', 'tampines_store'] as $id) {
+            $places[$id] = $this->seededModel(Place::class, $id);
+        }
+        $customers = [
+            'customer_alice' => $this->seededModel(Contact::class, 'customer_alice'),
+            'customer_ben'   => $this->seededModel(Contact::class, 'customer_ben'),
+        ];
+        $drivers = [
+            'driver_ava'  => $this->seededModel(Driver::class, 'driver_ava'),
+            'driver_ken'  => $this->seededModel(Driver::class, 'driver_ken'),
+            'driver_mira' => $this->seededModel(Driver::class, 'driver_mira'),
+        ];
+        $vehicles = [];
+        foreach (['van_central', 'van_east', 'van_airport', 'van_central_2', 'van_returns'] as $id) {
+            $vehicles[$id] = $this->seededModel(Vehicle::class, $id);
+        }
+        $dispatcher = $this->seededModel(User::class, 'dispatcher_user');
+        $flow       = OrderConfigSeeder::flow();
+
+        // seed id => [activity, driver, vehicle, customer, pickup, dropoff, waypoints, hour offset, items]
+        //
+        // The hour offset is when the order was created relative to the fixture clock; each
+        // tracking step lands 40 minutes after the previous one, so an order deep in the flow
+        // was created earlier in the day. Negative offsets are yesterday's completed work.
+        $orders = [
+            'lm_created_1'       => ['created',         null,          null,            'customer_alice', 'central_depot', 'orchard_store',  [],                                   3,  1],
+            'lm_created_2'       => ['created',         null,          null,            'customer_ben',   'west_depot',    'tampines_store', ['rochor_store'],                     4,  2],
+            'lm_dispatched_1'    => ['dispatched',      'driver_mira', 'van_returns',   'customer_alice', 'central_depot', 'rochor_store',   [],                                   2,  1],
+            'lm_dispatched_2'    => ['dispatched',      'driver_ken',  'van_east',      'customer_ben',   'airport_hub',   'tampines_store', [],                                   2,  3],
+            'lm_enroute_pickup'  => ['enroute_pickup',  'driver_ava',  'van_central',   'customer_alice', 'central_depot', 'orchard_store',  [],                                   1,  1],
+            'lm_arrived_pickup'  => ['arrived_pickup',  'driver_ken',  'van_airport',   'customer_ben',   'airport_hub',   'rochor_store',   [],                                   1,  2],
+            // The hero: three stops, a driver and a vehicle, mid-route.
+            'lm_picked_up_1'     => ['picked_up',       'driver_ava',  'van_central',   'customer_alice', 'central_depot', 'orchard_store',  ['rochor_store', 'tampines_store'],   0,  3],
+            'lm_picked_up_2'     => ['picked_up',       'driver_ken',  'van_east',      'customer_ben',   'west_depot',    'tampines_store', [],                                   0,  1],
+            'lm_enroute_dropoff' => ['enroute_dropoff', 'driver_ava',  'van_central_2', 'customer_alice', 'central_depot', 'tampines_store', ['orchard_store'],                   -1,  2],
+            'lm_arrived_dropoff' => ['arrived_dropoff', 'driver_ken',  'van_airport',   'customer_ben',   'airport_hub',   'orchard_store',  [],                                  -1,  1],
+            'lm_delivered_1'     => ['delivered',       'driver_ava',  'van_central',   'customer_alice', 'central_depot', 'rochor_store',   [],                                  -6,  2],
+            'lm_delivered_2'     => ['delivered',       'driver_ken',  'van_east',      'customer_ben',   'west_depot',    'orchard_store',  ['rochor_store'],                    -8,  1],
+            'lm_failed'          => ['failed',          'driver_mira', 'van_returns',   'customer_alice', 'central_depot', 'tampines_store', [],                                  -5,  1],
+            'lm_returned'        => ['returned',        'driver_ken',  'van_airport',   'customer_ben',   'airport_hub',   'rochor_store',   [],                                 -10,  2],
+            'lm_canceled'        => ['canceled',        null,          null,            'customer_alice', 'west_depot',    'orchard_store',  [],                                  -3,  1],
+        ];
+
+        foreach ($orders as $seedId => [$activity, $driverSeedId, $vehicleSeedId, $customerSeedId, $pickupSeedId, $dropoffSeedId, $waypointSeedIds, $hourOffset, $entityCount]) {
+            $history = $activity === 'canceled' ? ['created'] : OrderConfigSeeder::path($activity);
+            $reached = fn (string $step) => in_array($step, $history, true);
+
+            // Timestamps follow the history: dispatched when it passed "dispatched", started
+            // when the driver set off, completed on a terminal step.
+            $stepAt = fn (string $step) => $this->timestamp($hourOffset)->addMinutes(40 * max(0, array_search($step, $history, true)));
+
+            $payload = $this->createPayload($company, $seedId, $places[$pickupSeedId], $places[$dropoffSeedId], array_map(fn ($id) => $places[$id], $waypointSeedIds));
+            $order   = $this->createRecord(Order::class, [
+                '_key'                  => $this->fixtureKey($seedId),
+                'internal_id'           => $this->orderInternalId($seedId),
+                'company_uuid'          => $company->uuid,
+                'payload_uuid'          => $payload->uuid,
+                'order_config_uuid'     => $config->uuid,
+                'customer_uuid'         => $customers[$customerSeedId]?->uuid,
+                'customer_type'         => Contact::class,
+                'driver_assigned_uuid'  => $driverSeedId ? $drivers[$driverSeedId]?->uuid : null,
+                'vehicle_assigned_uuid' => $vehicleSeedId ? $vehicles[$vehicleSeedId]?->uuid : null,
+                'created_by_uuid'       => $dispatcher?->uuid,
+                'updated_by_uuid'       => $dispatcher?->uuid,
+                'dispatched'            => $reached('dispatched'),
+                'dispatched_at'         => $reached('dispatched') ? $stepAt('dispatched') : null,
+                'started'               => $reached('enroute_pickup'),
+                'started_at'            => $reached('enroute_pickup') ? $stepAt('enroute_pickup') : null,
+                'completed_at'          => $reached('delivered') || $reached('returned') ? $stepAt(end($history)) : null,
+                'type'                  => 'last-mile-delivery',
+                'status'                => $activity,
+                'notes'                 => $this->fixtureNote('order'),
+                'pod_method'            => 'scan',
+                'pod_required'          => true,
+                'orchestrator_priority' => 50,
+                'meta'                  => $this->meta($seedId),
+                'created_at'            => $this->timestamp($hourOffset),
+                'updated_at'            => $stepAt(end($history)),
+            ]);
+
+            $trackingNumber = $this->createTrackingNumber($company, $order, $seedId);
+            $order->forceFill(['tracking_number_uuid' => $trackingNumber->uuid])->save();
+            $this->seedEntities($company, $payload, $trackingNumber, $seedId, $entityCount, $places[$dropoffSeedId]);
+
+            // One tracking status per step reached, in order. This is the Activity timeline on
+            // the order details panel and the "Dispatched at …" badge beside the status.
+            $pickupPlace  = $places[$pickupSeedId];
+            $dropoffPlace = $places[$dropoffSeedId];
+            foreach ($history as $index => $step) {
+                $definition = $flow[$step] ?? ['status' => ucfirst($step), 'details' => '', 'complete' => false];
+                $atDropoff  = in_array($step, ['enroute_dropoff', 'arrived_dropoff', 'delivered', 'failed'], true);
+                $place      = $atDropoff ? $dropoffPlace : $pickupPlace;
+
+                $this->createRecord(TrackingStatus::class, [
+                    '_key'                 => $this->fixtureKey($seedId . '_status_' . $index),
+                    'company_uuid'         => $company->uuid,
+                    'tracking_number_uuid' => $trackingNumber->uuid,
+                    'status'               => $definition['status'],
+                    'details'              => $definition['details'],
+                    'code'                 => $step,
+                    'complete'             => (bool) ($definition['complete'] ?? false),
+                    'city'                 => 'Singapore',
+                    'country'              => 'SG',
+                    'location'             => $place?->location,
+                    'created_at'           => $stepAt($step),
+                    'updated_at'           => $stepAt($step),
+                ], true);
+            }
+
+            if ($activity === 'canceled') {
+                $this->createRecord(TrackingStatus::class, [
+                    '_key'                 => $this->fixtureKey($seedId . '_status_canceled'),
+                    'company_uuid'         => $company->uuid,
+                    'tracking_number_uuid' => $trackingNumber->uuid,
+                    'status'               => 'Order Canceled',
+                    'details'              => 'Canceled by the customer before dispatch.',
+                    'code'                 => 'canceled',
+                    'complete'             => true,
+                    'city'                 => 'Singapore',
+                    'country'              => 'SG',
+                    'location'             => $pickupPlace?->location,
+                    'created_at'           => $this->timestamp($hourOffset)->addMinutes(25),
+                    'updated_at'           => $this->timestamp($hourOffset)->addMinutes(25),
+                ], true);
+            }
+        }
+    }
+
     protected function createPayload(Company $company, string $seedId, ?Place $pickup, ?Place $dropoff, array $waypoints): Payload
     {
         /** @var Payload $payload */
@@ -215,6 +382,24 @@ class OrdersSeeder extends Seeder
             'owner_type'      => Order::class,
             'tracking_number' => $this->identifierPrefix() . '-' . str_pad((string) crc32($seedId), 10, '0', STR_PAD_LEFT),
             'region'          => 'SG',
+        ]);
+
+        // TrackingNumberObserver::created inserts an "Order Created" tracking status (code
+        // CREATED, location 0,0, no company) and calls updateOwnerStatus(), which rewrites the
+        // order's status to `created` — after this seeder set it to picked_up or delivered.
+        // That is how every last-mile order landed in the board's Created column. The
+        // observer still has to run (it generates the tracking number, QR and barcode the
+        // label view renders), so undo its two side effects instead: drop its status row —
+        // the seeded history carries its own `created` step with a real location — and put
+        // the seeded status back with a query update, which fires no model events.
+        TrackingStatus::query()
+            ->where('tracking_number_uuid', $trackingNumber->uuid)
+            ->where('code', 'CREATED')
+            ->delete();
+
+        Order::query()->whereKey($order->getKey())->update([
+            'status'     => $order->status,
+            'updated_at' => $order->updated_at,
         ]);
 
         return $trackingNumber;
