@@ -21,6 +21,7 @@ use Fleetbase\FleetOps\Support\Utils as FleetOpsUtils;
 use Fleetbase\LaravelMysqlSpatial\Types\Point;
 use Fleetbase\Models\Category;
 use Fleetbase\Models\Company;
+use Fleetbase\Models\File;
 use Fleetbase\Models\Transaction;
 use Fleetbase\Models\TransactionItem;
 use Fleetbase\Storefront\Models\AddonCategory;
@@ -47,6 +48,7 @@ use Fleetbase\Support\Utils;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -137,6 +139,7 @@ trait SeedsStorefrontFixtures
         $this->deleteFrom($this->storefrontConnection(), 'product_hours', fn ($query) => $query->whereIn('product_uuid', $productUuids));
         $this->deleteFrom($this->storefrontConnection(), 'catalog_category_products', fn ($query) => $query->whereIn('catalog_category_uuid', $catalogCategoryUuids)->orWhereIn('product_uuid', $productUuids));
         $this->purgeModel(Product::class);
+        $this->purgeModel(File::class);
         $this->purgeModel(Catalog::class);
         $this->purgeModel(CatalogCategory::class);
         $this->purgeModel(AddonCategory::class);
@@ -370,7 +373,7 @@ trait SeedsStorefrontFixtures
     {
         $salePrice = (int) ($product['sale_price'] ?? 0);
 
-        return $this->createRecord(Product::class, [
+        $model = $this->createRecord(Product::class, [
             'company_uuid'    => $company->uuid,
             'created_by_uuid' => session('user'),
             'store_uuid'      => $store->uuid,
@@ -391,6 +394,46 @@ trait SeedsStorefrontFixtures
             'can_pickup'      => $product['can_pickup'] ?? true,
             'status'          => $product['status'] ?? ProductStatus::PUBLISHED,
         ]);
+
+        $this->attachProductPhoto($company, $model, $productKey);
+
+        return $model;
+    }
+
+    /**
+     * Showcase: give the product its photo from seeders/Storefront/images/products/<key>.jpg
+     * (royalty-free stock — see the README there). The file is copied onto the public disk,
+     * which the proxy serves at /storage, and becomes the product's primary image. A product
+     * without a photo keeps Storefront's placeholder.
+     */
+    protected function attachProductPhoto(Company $company, Product $product, string $productKey): void
+    {
+        $source = dirname(__DIR__) . '/images/products/' . $productKey . '.jpg';
+        if (!is_file($source)) {
+            return;
+        }
+
+        $path = 'showcase/storefront/products/' . $productKey . '.jpg';
+        Storage::disk('public')->put($path, file_get_contents($source));
+
+        $file = $this->createRecord(File::class, [
+            '_key'              => $this->fixtureKey('product-photo:' . $productKey),
+            'public_id'         => 'file_' . substr(hash('sha256', $this->fixtureKey('product-photo:' . $productKey)), 0, 10),
+            'company_uuid'      => $company->uuid,
+            'uploader_uuid'     => session('user'),
+            'subject_uuid'      => $product->uuid,
+            'subject_type'      => Product::class,
+            'disk'              => 'public',
+            'path'              => $path,
+            'original_filename' => $productKey . '.jpg',
+            'content_type'      => 'image/jpeg',
+            'file_size'         => filesize($source),
+            'type'              => 'storefront_product',
+            'meta'              => $this->meta('product-photo:' . $productKey),
+        ], true);
+
+        $product->primary_image_uuid = $file->uuid;
+        Product::withoutEvents(fn () => $product->save());
     }
 
     protected function createAddonCategory(Company $company, Store $store, string $storeKey, string $addonKey, array $addonCategory): AddonCategory

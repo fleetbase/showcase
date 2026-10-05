@@ -73,7 +73,16 @@
  /stripe/* \
  /webhooks/*
 	handle @api {
-		reverse_proxy application:8000
+		# Uploaded files are served straight from the API's storage volume (mounted read-only
+		# into this container), the way the production nginx serves public/storage. The API
+		# image is not relied on for static files, and seeded product photos have to load.
+		handle_path /storage/* {
+			root * /srv/api-storage/public
+			file_server
+		}
+		handle {
+			reverse_proxy application:8000
+		}
 	}
 
 	handle /socketcluster/* {

@@ -69,6 +69,8 @@ services:
     volumes:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
+      # /storage/* is served from here — see the Caddyfile.
+      - api-storage:/srv/api-storage:ro
     depends_on:
       - console
       - application
