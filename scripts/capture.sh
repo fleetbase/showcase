@@ -203,18 +203,21 @@ capture_area() {
         '
 }
 
+# One area failing must not stop the rest: each area's failures.json is what the workflow reads
+# into the PR body, and an area that never ran has none. Collect and fail once at the end.
+FAILED_AREAS=()
 for area in "${AREAS[@]}"; do
     if [[ "$area" == "admin" ]]; then
         # Admin screens need a system admin. Restore on any exit: an owner left as admin would
         # put the admin console's extra navigation into every later area's screenshots.
         set_user_type admin
         trap 'set_user_type user >/dev/null 2>&1 || true' EXIT
-        capture_area "$area" leaflet
+        capture_area "$area" leaflet || FAILED_AREAS+=("$area")
         set_user_type user
         trap - EXIT
         continue
     fi
-    capture_area "$area" leaflet
+    capture_area "$area" leaflet || FAILED_AREAS+=("$area")
 done
 
 if [[ -n "$GOOGLE_MAPS_API_KEY" ]]; then
@@ -225,7 +228,7 @@ if [[ -n "$GOOGLE_MAPS_API_KEY" ]]; then
     # Leaflet run capture Google tiles under Leaflet file names.
     trap 'set_map_provider leaflet >/dev/null 2>&1 || true' EXIT
     for area in "${AREAS[@]}"; do
-        capture_area "$area" google
+        capture_area "$area" google || FAILED_AREAS+=("${area} (google)")
     done
     set_map_provider leaflet
     trap - EXIT
@@ -235,4 +238,8 @@ else
 fi
 
 echo
+if [[ ${#FAILED_AREAS[@]} -gt 0 ]]; then
+    echo "::error::Areas with failed captures: ${FAILED_AREAS[*]}"
+    exit 1
+fi
 echo "✔ Captured: ${AREAS[*]}"

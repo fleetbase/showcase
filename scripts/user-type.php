@@ -22,6 +22,13 @@ try {
     // A query update, not a model save: no observers, no updated_at, nothing else changes.
     \Illuminate\Support\Facades\DB::table('users')->where('uuid', $company->owner_uuid)->update(['type' => $type]);
 
+    // The console reads is_admin from /int/v1/auth/bootstrap, which the API caches for five
+    // minutes per user and token — and capture.sh reuses one token for every area. Without
+    // this, an area captured before admin leaves `is_admin: false` cached and every /admin
+    // screen bounces with "You do not have authorization to access admin!". The stack is
+    // throwaway, so flushing everything is simpler than enumerating the per-user keys.
+    \Illuminate\Support\Facades\Cache::flush();
+
     echo PHP_EOL . 'USER_TYPE=' . $type . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'USER_TYPE_ERROR=' . $e->getMessage() . PHP_EOL;
