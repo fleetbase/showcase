@@ -200,7 +200,8 @@ class DevelopersSeeder extends Seeder
                 'method'              => 'POST',
                 'status_code'         => $status,
                 'reason_phrase'       => $reason,
-                'duration'            => $ms,
+                // Seconds: the column is decimal(17,14), three digits before the point.
+                'duration'            => round($ms / 1000, 3),
                 'url'                 => $webhook->url,
                 'attempt'             => $attempt,
                 'response'            => $status === 200 ? ['received' => true] : ['error' => 'upstream timeout'],
@@ -242,7 +243,8 @@ class DevelopersSeeder extends Seeder
                 'full_url'            => $base . $path,
                 'status_code'         => $status,
                 'reason_phrase'       => $reason,
-                'duration'            => $ms,
+                // Seconds: the column is decimal(17,14), three digits before the point.
+                'duration'            => round($ms / 1000, 3),
                 'ip_address'          => '203.0.113.' . (20 + $index),
                 'version'             => 'v1',
                 'source'              => 'api',
