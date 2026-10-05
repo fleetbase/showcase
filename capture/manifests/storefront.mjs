@@ -31,6 +31,16 @@ export default {
         // ── Products ───────────────────────────────────────────────────────────────────
         page('products', 'storefront-products-list', '/storefront/products', { extraSettleMs: 2500 }),
         form('product-create', 'storefront-product-create', '/storefront/products', /new product|^\s*new\s*$/i),
+        {
+            // The Orchard Fruit Box: photo, variants, add-ons and a category, so the editor
+            // shows every section filled in.
+            id: 'product-edit',
+            file: 'storefront-product-edit',
+            fromSeed: true,
+            url: ({ publicId }) => `/storefront/products/${publicId}`,
+            waitFor: PANEL_OR_MAIN,
+            extraSettleMs: 2000,
+        },
         form('category-create', 'storefront-category-create', '/storefront/products', /new category|create category/i),
         form('product-addons', 'storefront-product-addons', '/storefront/products', /add-?ons/i),
         form('products-import', 'storefront-products-import', '/storefront/products', /import/i),

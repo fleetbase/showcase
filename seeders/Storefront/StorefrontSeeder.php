@@ -8,6 +8,7 @@ use Fleetbase\FleetOps\Models\Vehicle;
 use Fleetbase\FleetOps\Models\Zone;
 use Fleetbase\Storefront\Models\FoodTruck;
 use Fleetbase\Storefront\Models\Network;
+use Fleetbase\Storefront\Models\Product;
 use Fleetbase\Storefront\Models\NotificationChannel;
 use Fleetbase\Storefront\Models\Store;
 use Illuminate\Database\Seeder;
@@ -39,6 +40,7 @@ class StorefrontSeeder extends Seeder
 
         $store   = $this->seededStore();
         $network = Network::where('options->seed', 'showcase-storefront-network')->first();
+        $product = Product::where('meta->seed', 'showcase-storefront-store')->where('meta->seed_id', 'like', 'product:%:orchard-box')->first();
 
         if ($store) {
             $this->seedFoodTruck($store);
@@ -49,6 +51,7 @@ class StorefrontSeeder extends Seeder
             'storefront-store'           => $store?->public_id,
             'network-details'            => $network?->public_id,
             'network-invite-stores'      => $network?->public_id,
+            'product-edit'               => $product?->public_id,
         ]));
     }
 
