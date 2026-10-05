@@ -122,8 +122,11 @@ jobs:
       - name: Start the stack
         env:
           RELEASE_TAG: ${{ steps.cfg.outputs.tag }}
-          # Optional. Present → capture.sh adds a Google Maps pass for the live-map screens.
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          # Opt-in: the Google Maps pass runs only when the repo variable GOOGLE_MAPS_PASS is
+          # 'true' AND a key is available. The key alone is not enough on purpose — an
+          # org-level GOOGLE_MAPS_API_KEY exists, and a key whose referrer restrictions do not
+          # include http://proxy/* fails every Google entry, which would fail every run.
+          GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_PASS == 'true' && secrets.GOOGLE_MAPS_API_KEY || '' }}
         run: ./scripts/up.sh
 
       - name: Provision
