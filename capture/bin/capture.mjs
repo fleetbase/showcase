@@ -125,10 +125,14 @@ async function main() {
     const userId = await fetchSessionUserId({ apiHost, namespace, token });
     log('authenticated');
 
-    const ids = await resolveAll({ apiHost, namespace, token }, entries);
+    const { ids, failures: resolveFailures } = await resolveAll({ apiHost, namespace, token }, entries);
     if (Object.keys(ids).length > 0) {
         log(`resolved ${Object.keys(ids).length} detail record(s): ${JSON.stringify(ids)}`);
     }
+    for (const [id, message] of Object.entries(resolveFailures)) {
+        log(`FAILED ${id}: ${message}`);
+    }
+    entries = entries.filter((entry) => !(entry.id in resolveFailures));
 
     // DemoSeeder echoes this so two independent paths have to agree on which record a detail
     // page is showing. Optional — absent locally, present in CI.
@@ -187,9 +191,12 @@ async function main() {
     await writeFile(path.join(outDir, 'captures.json'), `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured: [...previous, ...captured] }, null, 2)}\n`);
     await writeFile(path.join(outDir, 'resolved-ids.json'), `${JSON.stringify(ids, null, 2)}\n`);
 
-    console.log(`\n${failures.length ? '✖' : '✔'} wrote ${captured.length} file(s) to ${outDir}${failures.length ? `; ${failures.length} failed` : ''}`);
-    if (failures.length > 0) {
-        console.error(`::error::${failures.length} capture entr${failures.length === 1 ? 'y' : 'ies'} failed: ${failures.map((f) => f.id).join(', ')}`);
+    const failedIds = [...new Set([...Object.keys(resolveFailures), ...failures.map((f) => f.id)])];
+    console.log(
+        `\n${failedIds.length ? '✖' : '✔'} wrote ${captured.length} file(s) to ${outDir}${failedIds.length ? `; ${failedIds.length} entr${failedIds.length === 1 ? 'y' : 'ies'} failed` : ''}`
+    );
+    if (failedIds.length > 0) {
+        console.error(`::error::${failedIds.length} capture entr${failedIds.length === 1 ? 'y' : 'ies'} failed: ${failedIds.join(', ')}`);
         process.exit(1);
     }
 }
