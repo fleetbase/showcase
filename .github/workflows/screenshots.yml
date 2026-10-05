@@ -34,7 +34,7 @@ on:
       areas:
         description: 'Space-separated manifests to capture'
         required: true
-        default: 'iam fleet-ops admin general developers'
+        default: 'iam fleet-ops admin general developers ledger extensions'
       open_pr:
         description: 'Also open a pull request on fleetbase.io (needs FLEETBASE_IO_TOKEN)'
         type: boolean
@@ -93,7 +93,7 @@ jobs:
           )"
           fi
           AREAS="${{ inputs.areas }}"
-          [[ -z "$AREAS" ]] && AREAS="iam fleet-ops admin general developers"
+          [[ -z "$AREAS" ]] && AREAS="iam fleet-ops admin general developers ledger extensions"
 
           # Opening a pull request is opt-in for manual runs and, for release-triggered runs,
           # governed by the repository variable OPEN_PR_ON_RELEASE — so a release can be made
