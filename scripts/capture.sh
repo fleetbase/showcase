@@ -76,7 +76,7 @@ echo "==> Freezing server-side timestamps"
 # that has to run on a developer's Mac and on an ubuntu runner.
 CODE="$(base64 < scripts/freeze-timestamps.php | tr -d '\n')"
 OUT="$(docker compose exec -T \
-    -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Demo}" \
+    -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Pte Ltd}" \
     application php artisan tinker --execute="eval(base64_decode('${CODE}'));" 2>&1 || true)"
 printf '%s\n' "$OUT" | grep -E '^(FROZEN_|FREEZE_ERROR)' || true
 if printf '%s\n' "$OUT" | grep -q 'FREEZE_ERROR'; then

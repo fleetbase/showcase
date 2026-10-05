@@ -49,7 +49,7 @@ set +e
 OUT="$(docker compose exec -T \
     -e "SHOWCASE_IDENTITY=${SHOWCASE_IDENTITY:-demo@fleetbase.io}" \
     -e "SHOWCASE_PASSWORD=${SHOWCASE_PASSWORD}" \
-    -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Demo}" \
+    -e "SHOWCASE_ORG_NAME=${SHOWCASE_ORG_NAME:-Fleetbase Pte Ltd}" \
     application php artisan db:seed --force --class="${CLASS}" 2>&1)"
 STATUS=$?
 set -e
