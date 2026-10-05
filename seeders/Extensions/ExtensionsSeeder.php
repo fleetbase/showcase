@@ -130,6 +130,8 @@ class ExtensionsSeeder extends Seeder
                 'public_id'      => 'bundle_' . substr(hash('sha256', $this->fixtureKey('bundle:' . $slug)), 0, 10),
                 'company_uuid'   => $publisher->uuid,
                 'extension_uuid' => $extension->uuid,
+                // Normally generated in the creating event, which is skipped here.
+                'bundle_id'      => $this->deterministicUuid('bundle:' . $slug),
                 'bundle_number'  => strtoupper($slug) . '-' . str_replace('.', '', $version),
                 'version'        => $version,
                 'status'         => 'approved',
@@ -169,6 +171,14 @@ class ExtensionsSeeder extends Seeder
         $this->announceFixtures([
             'extension-details' => $extensions['flespi']->public_id ?? null,
         ]);
+    }
+
+    /** A UUID-shaped value derived from the seed id, so it is the same on every run. */
+    protected function deterministicUuid(string $seedId): string
+    {
+        $h = md5($this->fixtureKey($seedId));
+
+        return substr($h, 0, 8) . '-' . substr($h, 8, 4) . '-4' . substr($h, 13, 3) . '-a' . substr($h, 17, 3) . '-' . substr($h, 20, 12);
     }
 
     /** Fixture time minus whole days; never after the capture date. */
