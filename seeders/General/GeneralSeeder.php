@@ -116,8 +116,11 @@ class GeneralSeeder extends Seeder
             'meta'            => $this->meta('chat_dispatch_team'),
         ], true);
 
+        // A message's sender is the PARTICIPANT, not the user: chat_messages.sender_uuid is a
+        // foreign key to chat_participants.uuid.
+        $participants = [];
         foreach (array_values($members) as $index => $member) {
-            $this->createRecord(ChatParticipant::class, [
+            $participants[$index] = $this->createRecord(ChatParticipant::class, [
                 'public_id'         => $this->publicId('chat_participant', 'dispatch_team_' . $index),
                 'company_uuid'      => $company->uuid,
                 'chat_channel_uuid' => $channel->uuid,
@@ -125,7 +128,6 @@ class GeneralSeeder extends Seeder
             ], true);
         }
 
-        $speakers = array_values($members);
         $messages = [
             [1, 'FLT-2007 is picked up — Amara is on the way to Rochor.'],
             [0, 'Thanks. Can we move FLT-2012 to tomorrow morning? The recipient called back.'],
@@ -133,7 +135,7 @@ class GeneralSeeder extends Seeder
             [0, 'Perfect. TRL-01 is coupled to JUR-07 for the linehaul, so the west depot is clear.'],
         ];
         foreach ($messages as $index => [$speaker, $content]) {
-            $sender = $speakers[$speaker] ?? $owner;
+            $sender = $participants[$speaker] ?? $participants[0];
             $this->createRecord(ChatMessage::class, [
                 'public_id'         => $this->publicId('chat_message', 'dispatch_team_' . $index),
                 'company_uuid'      => $company->uuid,
