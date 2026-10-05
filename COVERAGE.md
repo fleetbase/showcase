@@ -228,6 +228,8 @@ rather than silently dropped, because each needs a different kind of work:
 | `integrated-vendor-new` | `/manage/vendors/integrated/new` never finished loading — 240s deadline, empty DOM | Someone to open that route by hand and see what it waits for |
 | `order-edit` | There is no order `edit` route in fleetops 0.6.70; orders are edited from the details panel's action menu | Capture it through the panel's ellipsis menu instead |
 | `device-events` | `/connectivity/events` renders its empty state although `ConnectivitySeeder` creates two `DeviceEvent` rows with `company_uuid` and `occurred_at` set | Find why the list does not return them, then restore the entry |
+| `place-operations` | On v0.7.68 a place's detail panel has only an Overview tab; the Operations route renders an empty panel | Restore if the tab returns; the docs still describe Orders, Performance and Rules tabs |
+| `order-config-entities` | The Last-Mile config is seeded with `entities => []`, so the tab is a lone "New Custom Entity" button | Seed entity definitions on the config (e.g. Parcel), then restore |
 
 ## Recommended order of work
 

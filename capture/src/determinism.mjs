@@ -303,6 +303,55 @@ async function avatarFor(url) {
 // also why those captures are not byte-stable and are kept out of the compare gate.
 const GOOGLE_MAPS_HOSTS = /(^|\.)(googleapis\.com|gstatic\.com|ggpht\.com|google\.com)$/i;
 
+// The console looks up the viewer's location from the browser (ember-core's lookupUserIp:
+// json.geoiplookup.io, then ipapi.co). Aborting both — as every unknown origin is — leaves
+// it on fallback data, and since v0.7.68 current-user.js reports that with an orange
+// "Unable to detect your location" toast across the top of the page: it was in 56 of 106
+// screens of the v0.7.68 capture. Answer both instead, with one fixed location that matches
+// the fixtures (Singapore). The IP is from 203.0.113.0/24, reserved for documentation.
+// Each body is in its own provider's shape, because lookupUserIp normalises each one
+// differently; the CORS header is required because the request is cross-origin.
+const GEOIP_FIXTURES = {
+    'json.geoiplookup.io': {
+        ip: '203.0.113.10',
+        city: 'Singapore',
+        region: 'Central Singapore',
+        country_code: 'SG',
+        country_name: 'Singapore',
+        continent_code: 'AS',
+        continent_name: 'Asia',
+        latitude: 1.2903,
+        longitude: 103.8519,
+        postal_code: '048616',
+        timezone_name: 'Asia/Singapore',
+        currency_code: 'SGD',
+        currency_name: 'Singapore Dollar',
+        language_code: 'en',
+        language_name: 'English',
+        isp: 'Fleetbase Showcase',
+        org: 'Fleetbase Showcase',
+        asn: 'AS64496',
+        connection_type: 'corporate',
+    },
+    'ipapi.co': {
+        ip: '203.0.113.10',
+        city: 'Singapore',
+        region: 'Central Singapore',
+        country_code: 'SG',
+        country_name: 'Singapore',
+        continent_code: 'AS',
+        latitude: 1.2903,
+        longitude: 103.8519,
+        postal: '048616',
+        timezone: 'Asia/Singapore',
+        currency: 'SGD',
+        currency_name: 'Dollar',
+        languages: 'en-SG,ms-SG,ta-SG,zh-SG',
+        org: 'Fleetbase Showcase',
+        asn: 'AS64496',
+    },
+};
+
 export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlocked, mapProvider = 'leaflet' }) {
     await page.route('**/*', async (route) => {
         const request = route.request();
@@ -311,6 +360,16 @@ export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlock
         if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
         if (isLocalOrigin(url, { baseUrl, apiHost })) return route.continue();
         if (mapProvider === 'google' && GOOGLE_MAPS_HOSTS.test(hostnameOf(url))) return route.continue();
+
+        const geoip = GEOIP_FIXTURES[hostnameOf(url)];
+        if (geoip) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { 'access-control-allow-origin': '*' },
+                body: JSON.stringify(geoip),
+            });
+        }
 
         if (AVATAR_PATTERN.test(url)) {
             const asset = await avatarFor(url);
@@ -452,6 +511,18 @@ export async function waitForQuiescence(page, entry, { timeout = 45_000, mapProv
     // want — a broken avatar should not hang the run, it should show up in the screenshot
     // and be caught by review.
     await page.waitForFunction(() => [...document.images].every((img) => img.complete), null, { timeout });
+
+    // A warning or error toast on screen is a defect in the screenshot, never content: the
+    // v0.7.68 capture shipped "Unable to detect your location" in 56 of 106 screens because
+    // nothing looked. Fail the entry instead, so the problem shows up as a red run with the
+    // toast's text, not as a published image. (ember-cli-notifications markup.)
+    const toast = await page.evaluate(() => {
+        const el = document.querySelector('.c-notification--warning, .c-notification--error');
+        return el ? el.textContent.replace(/\s+/g, ' ').trim() : null;
+    });
+    if (toast) {
+        throw new Error(`[${entry.id}] a warning/error toast is on screen: "${toast.slice(0, 160)}"`);
+    }
 
     if (entry.map?.settleTiles) {
         if (mapProvider === 'google') await waitForGoogleImagery(page, { timeout });
