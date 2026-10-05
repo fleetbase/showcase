@@ -26,7 +26,7 @@ export default {
     entries: [
         {
             id: 'users-management',
-            file: 'iam-users-management',
+            file: 'iam-users-list',
             url: '/iam/users',
             waitFor: TABLE,
             // Nine seeded users plus the organization owner.
@@ -34,14 +34,14 @@ export default {
         },
         {
             id: 'groups-management',
-            file: 'iam-groups-management',
+            file: 'iam-groups-list',
             url: '/iam/groups',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 3 },
         },
         {
             id: 'roles-management',
-            file: 'iam-roles-management',
+            file: 'iam-roles-list',
             url: '/iam/roles',
             waitFor: TABLE,
             // Platform-provided, not seeded — 27 of them at v0.7.57. The floor is deliberately
@@ -50,7 +50,7 @@ export default {
         },
         {
             id: 'policy-management',
-            file: 'iam-policy-management',
+            file: 'iam-policies-list',
             url: '/iam/policies',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 5 },

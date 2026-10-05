@@ -78,7 +78,7 @@ export default {
         // until confirmed on a running stack (see the header).
         {
             id: 'live-orders-panel',
-            file: 'fleet-ops-live-orders-panel',
+            file: 'fleet-ops-orders-map',
             // The orders index opens on the Map view: a Leaflet map with the active orders
             // listed in the side panel. The panel is NOT open by default — its state lives in
             // the app-cache localStorage bucket, which the capture wipes on every boot for
@@ -99,7 +99,7 @@ export default {
         },
         {
             id: 'orders-kanban',
-            file: 'fleet-ops-orders-kanban',
+            file: 'fleet-ops-orders-board',
             url: '/fleet-ops',
             waitFor: '.leaflet-container, main',
             // Board view groups orders by activity, one column per step of the order config's
@@ -121,7 +121,7 @@ export default {
         },
         {
             id: 'multi-waypoint-order',
-            file: 'fleet-ops-multi-waypoint-order',
+            file: 'fleet-ops-order-details-multi-stop',
             // FLT-2007: picked up, three stops, driver and vehicle assigned, mid-route. The
             // details view is a panel over the map, so the route and the activity timeline
             // both render.
@@ -141,7 +141,7 @@ export default {
         },
         {
             id: 'orders-table-list',
-            file: 'fleet-ops-orders-table-list',
+            file: 'fleet-ops-orders-list',
             // operations has path '/' and orders has path '/' inside it, so the orders index
             // is the engine root.
             url: '/fleet-ops',
@@ -273,7 +273,7 @@ export default {
         },
         {
             id: 'maintenance-schedules',
-            file: 'fleet-ops-maintenance-schedules',
+            file: 'fleet-ops-maintenance-schedules-list',
             url: '/fleet-ops/maintenance/schedules',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 1 },
@@ -370,7 +370,7 @@ export default {
                 scheduling: 'fleet-ops-scheduling-settings',
                 orchestrator: 'fleet-ops-orchestrator-settings',
                 'navigator-app': 'fleet-ops-navigator-app-settings',
-                'custom-fields': 'fleet-ops-custom-fields',
+                'custom-fields': 'fleet-ops-custom-fields-settings',
                 telematics: 'fleet-ops-telematics-settings',
             }[page],
             url: `/fleet-ops/settings/${page}`,
@@ -461,7 +461,7 @@ export default {
         },
         {
             id: 'order-new',
-            file: 'fleet-ops-order-new',
+            file: 'fleet-ops-order-create',
             // operations/orders/managing-orders. Replaces the hand-made create-order shot.
             url: '/fleet-ops/new',
             waitFor: `${PANEL}, main form`,
@@ -516,7 +516,7 @@ export default {
         },
         {
             id: 'parts-inventory',
-            file: 'fleet-ops-parts-inventory',
+            file: 'fleet-ops-parts-list',
             url: '/fleet-ops/maintenance/parts',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 2 },
@@ -524,7 +524,7 @@ export default {
         },
         {
             id: 'maintenance-log',
-            file: 'fleet-ops-maintenance-log',
+            file: 'fleet-ops-maintenances-list',
             url: '/fleet-ops/maintenance/maintenances',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 2 },
