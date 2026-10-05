@@ -102,21 +102,27 @@ class GeneralSeeder extends Seeder
             $this->userByName($company, 'Kenji Tan'),
         ]);
 
+        // All chat records are created without model events. The participant observer logs
+        // who added each member (ChatLog::participantAdded) from the signed-in user, and a
+        // seeder has none — it threw on null and took the whole seed down. Without events the
+        // public ids are not generated either, so they are set here, derived from seed ids.
         /** @var ChatChannel $channel */
         $channel = $this->createRecord(ChatChannel::class, [
+            'public_id'       => $this->publicId('chat_channel', 'dispatch_team'),
             'company_uuid'    => $company->uuid,
             'created_by_uuid' => $owner->uuid,
             'name'            => 'Dispatch Team',
             'slug'            => 'dispatch-team',
             'meta'            => $this->meta('chat_dispatch_team'),
-        ]);
+        ], true);
 
-        foreach ($members as $member) {
+        foreach (array_values($members) as $index => $member) {
             $this->createRecord(ChatParticipant::class, [
+                'public_id'         => $this->publicId('chat_participant', 'dispatch_team_' . $index),
                 'company_uuid'      => $company->uuid,
                 'chat_channel_uuid' => $channel->uuid,
                 'user_uuid'         => $member->uuid,
-            ]);
+            ], true);
         }
 
         $speakers = array_values($members);
@@ -129,14 +135,20 @@ class GeneralSeeder extends Seeder
         foreach ($messages as $index => [$speaker, $content]) {
             $sender = $speakers[$speaker] ?? $owner;
             $this->createRecord(ChatMessage::class, [
+                'public_id'         => $this->publicId('chat_message', 'dispatch_team_' . $index),
                 'company_uuid'      => $company->uuid,
                 'chat_channel_uuid' => $channel->uuid,
                 'sender_uuid'       => $sender->uuid,
                 'content'           => $content,
                 'created_at'        => $this->timestamp(9)->addMinutes(5 * $index),
                 'updated_at'        => $this->timestamp(9)->addMinutes(5 * $index),
-            ]);
+            ], true);
         }
+    }
+
+    protected function publicId(string $type, string $seedId): string
+    {
+        return $type . '_' . substr(hash('sha256', $this->seedName() . ':' . $seedId), 0, 10);
     }
 
     protected function userByName(Company $company, string $name): ?User
