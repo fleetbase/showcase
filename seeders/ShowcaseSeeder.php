@@ -37,6 +37,7 @@ class ShowcaseSeeder extends Seeder
         Developers\DevelopersSeeder::class,
         Storefront\StorefrontSeeder::class,
         Ledger\LedgerSeeder::class,
+        Extensions\ExtensionsSeeder::class,
     ];
 
     public function run(): void

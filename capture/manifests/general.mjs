@@ -43,6 +43,11 @@ export default {
             url: '/',
             waitFor: MAIN,
             interact: async (page) => {
+                // "Add widgets" exists only on a custom dashboard; the system dashboard's menu
+                // offers just "Create new Dashboard". Switch to the one GeneralSeeder created.
+                await page.locator('main .ember-basic-dropdown-trigger').nth(0).click();
+                await page.locator('.next-dd-item', { hasText: 'Operations Overview' }).first().click();
+                await page.getByText('Operations Overview', { exact: true }).first().waitFor({ state: 'visible' });
                 // The ellipsis menu beside the switcher: create, edit, add widgets, delete.
                 await page.locator('main .ember-basic-dropdown-trigger').nth(1).click();
                 await page
@@ -52,6 +57,17 @@ export default {
             },
             waitForAfterInteract: '.next-content-overlay.is-open .next-content-overlay-panel',
             extraSettleMs: 1500,
+            // The switch is saved server-side (is_default). Reset it, or console-dashboard in
+            // the next theme pass shows the custom dashboard instead of the system one.
+            cleanup: async (page) => {
+                await page.evaluate(async () => {
+                    const session = JSON.parse(localStorage.getItem('ember_simple_auth-session') || '{}');
+                    await fetch('/int/v1/dashboards/reset-default', {
+                        method: 'POST',
+                        headers: { Accept: 'application/json', Authorization: `Bearer ${session?.authenticated?.token}` },
+                    });
+                });
+            },
         },
 
         // ── Header trays ───────────────────────────────────────────────────────────────

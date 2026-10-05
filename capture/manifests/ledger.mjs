@@ -66,10 +66,9 @@ export default {
             url: ({ publicId }) => `/ledger/payments/wallets/${publicId}`,
             waitFor: PANEL_OR_MAIN,
             interact: async (page) => {
-                await page
-                    .getByRole('button', { name: /add funds|top up|deposit/i })
-                    .first()
-                    .click();
+                // Icon-only buttons in the panel header (label shows as a tooltip): Add Funds
+                // is the primary one, Transfer the default one, Freeze the danger one.
+                await page.locator('.next-content-overlay.is-open .resource-panel-header button.btn-primary').first().click();
             },
             waitForAfterInteract: DIALOG,
             extraSettleMs: 1000,
@@ -81,10 +80,7 @@ export default {
             url: ({ publicId }) => `/ledger/payments/wallets/${publicId}`,
             waitFor: PANEL_OR_MAIN,
             interact: async (page) => {
-                await page
-                    .getByRole('button', { name: /transfer/i })
-                    .first()
-                    .click();
+                await page.locator('.next-content-overlay.is-open .resource-panel-header button.btn-default').first().click();
             },
             waitForAfterInteract: DIALOG,
             extraSettleMs: 1000,

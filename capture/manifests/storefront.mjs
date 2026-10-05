@@ -30,7 +30,19 @@ export default {
 
         // ── Products ───────────────────────────────────────────────────────────────────
         page('products', 'storefront-products-list', '/storefront/products', { extraSettleMs: 2500 }),
-        form('product-create', 'storefront-product-create', '/storefront/products', /new product|^\s*new\s*$/i),
+        {
+            // "New" stays disabled until a category is selected.
+            id: 'product-create',
+            file: 'storefront-product-create',
+            url: '/storefront/products',
+            waitFor: MAIN,
+            interact: async (p) => {
+                await p.locator('.storefront-product-category', { hasText: 'Fresh Produce' }).first().click();
+                await p.getByRole('button', { name: /^\s*new\s*$/i }).first().click();
+            },
+            waitForAfterInteract: FORM,
+            extraSettleMs: 1200,
+        },
         {
             // The Orchard Fruit Box: photo, variants, add-ons and a category, so the editor
             // shows every section filled in.
@@ -41,7 +53,18 @@ export default {
             waitFor: PANEL_OR_MAIN,
             extraSettleMs: 2000,
         },
-        form('category-create', 'storefront-category-create', '/storefront/products', /new category|create category/i),
+        {
+            // The icon-only + in the category sidebar's header.
+            id: 'category-create',
+            file: 'storefront-category-create',
+            url: '/storefront/products',
+            waitFor: '.storefront-product-sidebar',
+            interact: async (p) => {
+                await p.locator('.storefront-product-sidebar__header button').first().click();
+            },
+            waitForAfterInteract: FORM,
+            extraSettleMs: 1200,
+        },
         form('product-addons', 'storefront-product-addons', '/storefront/products', /add-?ons/i),
         form('products-import', 'storefront-products-import', '/storefront/products', /import/i),
 

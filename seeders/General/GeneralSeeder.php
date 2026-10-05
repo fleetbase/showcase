@@ -8,6 +8,8 @@ use Fleetbase\Models\ChatChannel;
 use Fleetbase\Models\ChatMessage;
 use Fleetbase\Models\ChatParticipant;
 use Fleetbase\Models\Company;
+use Fleetbase\Models\Dashboard;
+use Fleetbase\Models\DashboardWidget;
 use Fleetbase\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +48,7 @@ class GeneralSeeder extends Seeder
 
         $this->seedNotifications($owner);
         $this->seedChat($company, $owner);
+        $this->seedDashboard($company, $owner);
 
         $this->command?->info('Seeded ' . $this->seedName() . ' fixtures for company: ' . $company->public_id);
     }
@@ -60,6 +63,55 @@ class GeneralSeeder extends Seeder
             ChatParticipant::whereIn('chat_channel_uuid', $channels)->forceDelete();
         }
         $this->purgeModel(ChatChannel::class);
+
+        $dashboards = $this->seededQuery(Dashboard::class)->pluck('uuid');
+        if ($dashboards->isNotEmpty()) {
+            DashboardWidget::whereIn('dashboard_uuid', $dashboards)->forceDelete();
+        }
+        $this->purgeModel(Dashboard::class);
+    }
+
+    /**
+     * A custom dashboard beside the system one. "Add widgets" only exists on a custom
+     * dashboard — the system dashboard's menu offers just "Create new Dashboard" — so
+     * console-dashboard-add-widgets switches to this one first. NOT the default: the main
+     * console-dashboard screenshot stays the system dashboard, and the add-widgets entry's
+     * cleanup resets the default after it switches.
+     *
+     * Widgets are stored the way the widget panel saves them: the ExtensionComponent string,
+     * a grid position, and options.widget_key naming the registry widget.
+     */
+    protected function seedDashboard(Company $company, User $owner): void
+    {
+        $dashboard = $this->createRecord(Dashboard::class, [
+            '_key'         => $this->fixtureKey('dashboard:operations'),
+            'user_uuid'    => $owner->uuid,
+            'company_uuid' => $company->uuid,
+            'name'         => 'Operations Overview',
+            'is_default'   => false,
+            'tags'         => [],
+            'options'      => [],
+            'meta'         => $this->meta('dashboard:operations'),
+        ], true);
+
+        $iam    = '#extension-component:@fleetbase/iam-engine:widget/';
+        $layout = [
+            ['iam-kpi-active-users', 'kpi-active-users', 0, 0, 3, 4],
+            ['iam-kpi-pending-invites', 'kpi-pending-invites', 3, 0, 3, 4],
+            ['iam-kpi-roles', 'kpi-roles', 6, 0, 3, 4],
+            ['iam-kpi-mfa-coverage', 'kpi-mfa-coverage', 9, 0, 3, 4],
+            ['iam-recent-activity', 'recent-activity', 0, 4, 6, 7],
+            ['iam-access-risk', 'access-risk', 6, 4, 6, 8],
+        ];
+        foreach ($layout as [$key, $component, $x, $y, $w, $h]) {
+            $this->createRecord(DashboardWidget::class, [
+                'dashboard_uuid' => $dashboard->uuid,
+                'name'           => $key,
+                'component'      => $iam . $component,
+                'grid_options'   => ['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h],
+                'options'        => ['widget_key' => $key],
+            ], true);
+        }
     }
 
     protected function seedNotifications(User $owner): void

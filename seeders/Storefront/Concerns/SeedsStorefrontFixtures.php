@@ -309,7 +309,10 @@ trait SeedsStorefrontFixtures
 
             $this->createRecord(StoreHour::class, [
                 'store_location_uuid' => $storeLocation->uuid,
-                'day_of_week'         => $day,
+                // Capitalised, as the console's own add-hours dialog saves it: ScheduleManager
+                // keys its week by 'Monday'..'Sunday', and a lowercase day made
+                // schedule[day].pushObject throw and hung /storefront/settings/locations.
+                'day_of_week'         => ucfirst($day),
                 'start'               => $start,
                 'end'                 => $end,
             ]);

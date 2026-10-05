@@ -68,7 +68,7 @@ class LedgerSeeder extends Seeder
 
         $this->recalculateBalances();
 
-        $wallet = Wallet::where('company_uuid', $company->uuid)->orderBy('created_at')->first();
+        $wallet = $this->operatingWallet();
         $this->announceFixtures(array_filter([
             'invoice-details' => $invoices['inv_04']->public_id ?? null,
             'gateway-details' => $gateways['gateway_stripe']->public_id ?? null,
@@ -78,6 +78,24 @@ class LedgerSeeder extends Seeder
         ]));
 
         $this->command?->info('Seeded ' . $this->seedName() . ' books for company: ' . $company->public_id);
+    }
+
+    /**
+     * The company's Operating Wallet, which Ledger provisions itself. It is provisioned when
+     * the company is created — before the Organization seeder sets the company's currency — so
+     * it comes up in USD beside books kept in SGD. Align it while it is still empty.
+     */
+    protected function operatingWallet(): ?Wallet
+    {
+        $wallets = Wallet::where('company_uuid', $this->company->uuid);
+        $wallet  = (clone $wallets)->where('name', 'Operating Wallet')->first() ?? $wallets->orderBy('created_at')->first();
+
+        if ($wallet && $wallet->currency !== $this->currency && (int) $wallet->getRawOriginal('balance') === 0) {
+            $wallet->forceFill(['currency' => $this->currency]);
+            Wallet::withoutEvents(fn () => $wallet->saveQuietly());
+        }
+
+        return $wallet;
     }
 
     public function purgeSeedData(): void
