@@ -577,6 +577,14 @@ trait SeedsStorefrontFixtures
     {
         $seedId = 'customer:' . Str::slug($name);
 
+        // Showcase: the store and network seeders run back to back with the same customer
+        // list, and a second customer with the same email is rejected
+        // (ProfileIdentityConflictException). Reuse the one the store seeder created.
+        $existing = Contact::where('company_uuid', $company->uuid)->where('type', 'customer')->where('email', $email)->first();
+        if ($existing) {
+            return $existing;
+        }
+
         return $this->createRecord(Contact::class, [
             '_key'         => $this->fixtureKey($seedId),
             'company_uuid' => $company->uuid,
