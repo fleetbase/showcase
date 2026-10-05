@@ -119,6 +119,20 @@ jobs:
 
       # Every Fleetbase image is pulled, never built — that is the point of screenshotting a
       # release rather than a branch. scripts/up.sh writes .env and waits on the healthchecks.
+      # compare.mjs runs on the runner, not in the Playwright container, and the container
+      # keeps its node_modules in a named volume — so nothing had ever installed them here
+      # and compare died on `Cannot find package 'pixelmatch'` after a perfectly good capture.
+      #
+      # It has to happen BEFORE anything starts a container: Docker creates
+      # capture/node_modules on the host as the mount point for that named volume, owned by
+      # root, and npm then cannot write into it (EACCES).
+      - name: Install compare dependencies
+        if: steps.cfg.outputs.open_pr == 'true'
+        working-directory: capture
+        run: |
+          npm ci --no-audit --no-fund
+          mkdir -p .cache/domhash
+
       - name: Start the stack
         env:
           RELEASE_TAG: ${{ steps.cfg.outputs.tag }}
@@ -218,15 +232,6 @@ jobs:
           key: domhash-${{ github.run_id }}
           restore-keys: |
             domhash-
-
-      # compare.mjs runs on the runner, not in the Playwright container — and the container
-      # keeps its node_modules in a named volume, so nothing has ever installed them here.
-      # Without this the compare step dies on `Cannot find package 'pixelmatch'` after a
-      # perfectly good capture, and no pull request is opened.
-      - name: Install compare dependencies
-        if: steps.cfg.outputs.open_pr == 'true'
-        working-directory: capture
-        run: npm ci --no-audit --no-fund
 
       - name: Compare against the published library
         if: steps.cfg.outputs.open_pr == 'true'
