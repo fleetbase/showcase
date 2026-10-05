@@ -64,6 +64,7 @@ async function captureStable(page, { attempts = 4, gapMs = 250, entryId }) {
  */
 export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, token, userId, tileCache, outDir, mapProvider = 'leaflet', log = () => {} }) {
     const captured = [];
+    const failures = [];
     const blocked = new Set();
 
     await mkdir(outDir, { recursive: true });
@@ -119,7 +120,12 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
                         const html = await page.content().catch(() => '');
                         await writeFile(path.join(debugDir, `${entry.id}-${theme}-FAILED.html`), html);
                     }
-                    throw error;
+                    // Keep going. A batch of twenty new entries with unverified selectors
+                    // would otherwise take twenty CI runs to debug; recording the failure and
+                    // moving on makes it one run. bin/capture.mjs still exits non-zero.
+                    failures.push({ id: entry.id, theme, url, message: error.message.split('\n')[0] });
+                    log(`FAILED ${entry.id} (${theme}): ${error.message.split('\n')[0]}`);
+                    continue;
                 }
 
                 const png = await captureStable(page, { entryId: `${entry.id}/${theme}` });
@@ -154,5 +160,10 @@ export async function captureAll({ browser, manifest, ids, baseUrl, apiHost, tok
         }
     }
 
-    return captured;
+    if (failures.length > 0) {
+        log(`${failures.length} entr${failures.length === 1 ? 'y' : 'ies'} failed:`);
+        for (const failure of failures) log(`  - ${failure.id} (${failure.theme}) ${failure.url}: ${failure.message}`);
+    }
+
+    return { captured, failures };
 }

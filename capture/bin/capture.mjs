@@ -152,8 +152,9 @@ async function main() {
 
     const browser = await chromium.launch({ args: LAUNCH_ARGS });
     let captured;
+    let failures = [];
     try {
-        captured = await captureAll({
+        ({ captured, failures } = await captureAll({
             browser,
             manifest: { ...manifest, entries },
             ids,
@@ -165,7 +166,7 @@ async function main() {
             outDir,
             mapProvider,
             log,
-        });
+        }));
     } finally {
         await browser.close();
         // On failure this is the only place the tile statistics are reported, and a blank
@@ -186,7 +187,11 @@ async function main() {
     await writeFile(path.join(outDir, 'captures.json'), `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured: [...previous, ...captured] }, null, 2)}\n`);
     await writeFile(path.join(outDir, 'resolved-ids.json'), `${JSON.stringify(ids, null, 2)}\n`);
 
-    console.log(`\n✔ wrote ${captured.length} file(s) to ${outDir}`);
+    console.log(`\n${failures.length ? '✖' : '✔'} wrote ${captured.length} file(s) to ${outDir}${failures.length ? `; ${failures.length} failed` : ''}`);
+    if (failures.length > 0) {
+        console.error(`::error::${failures.length} capture entr${failures.length === 1 ? 'y' : 'ies'} failed: ${failures.map((f) => f.id).join(', ')}`);
+        process.exit(1);
+    }
 }
 
 main().catch((error) => {
