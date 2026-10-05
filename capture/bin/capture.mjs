@@ -125,10 +125,14 @@ async function main() {
     const userId = await fetchSessionUserId({ apiHost, namespace, token });
     log('authenticated');
 
-    const ids = await resolveAll({ apiHost, namespace, token }, entries);
+    const { ids, failures: resolveFailures } = await resolveAll({ apiHost, namespace, token }, entries);
     if (Object.keys(ids).length > 0) {
         log(`resolved ${Object.keys(ids).length} detail record(s): ${JSON.stringify(ids)}`);
     }
+    for (const [id, message] of Object.entries(resolveFailures)) {
+        log(`FAILED ${id}: ${message}`);
+    }
+    entries = entries.filter((entry) => !(entry.id in resolveFailures));
 
     // DemoSeeder echoes this so two independent paths have to agree on which record a detail
     // page is showing. Optional — absent locally, present in CI.
@@ -152,8 +156,9 @@ async function main() {
 
     const browser = await chromium.launch({ args: LAUNCH_ARGS });
     let captured;
+    let failures = [];
     try {
-        captured = await captureAll({
+        ({ captured, failures } = await captureAll({
             browser,
             manifest: { ...manifest, entries },
             ids,
@@ -165,7 +170,7 @@ async function main() {
             outDir,
             mapProvider,
             log,
-        });
+        }));
     } finally {
         await browser.close();
         // On failure this is the only place the tile statistics are reported, and a blank
@@ -186,7 +191,14 @@ async function main() {
     await writeFile(path.join(outDir, 'captures.json'), `${JSON.stringify({ area: manifest.area, defaultTheme: manifest.defaultTheme, captured: [...previous, ...captured] }, null, 2)}\n`);
     await writeFile(path.join(outDir, 'resolved-ids.json'), `${JSON.stringify(ids, null, 2)}\n`);
 
-    console.log(`\n✔ wrote ${captured.length} file(s) to ${outDir}`);
+    const failedIds = [...new Set([...Object.keys(resolveFailures), ...failures.map((f) => f.id)])];
+    console.log(
+        `\n${failedIds.length ? '✖' : '✔'} wrote ${captured.length} file(s) to ${outDir}${failedIds.length ? `; ${failedIds.length} entr${failedIds.length === 1 ? 'y' : 'ies'} failed` : ''}`
+    );
+    if (failedIds.length > 0) {
+        console.error(`::error::${failedIds.length} capture entr${failedIds.length === 1 ? 'y' : 'ies'} failed: ${failedIds.join(', ')}`);
+        process.exit(1);
+    }
 }
 
 main().catch((error) => {

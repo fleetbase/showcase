@@ -22,8 +22,16 @@ export async function resolvePublicId({ apiHost, namespace = 'int/v1', token }, 
     let rows = await getRows(`${base}?query=${encodeURIComponent(spec.query)}&limit=50`, headers);
     if (rows.length === 0) rows = await getRows(`${base}?limit=200`, headers);
 
+    // Case-insensitive: several models upper-case what they store (Place names come back
+    // as RAFFLES QUAY), and a manifest should not have to know which.
     const { field, value } = spec.match;
-    const hits = rows.filter((row) => String(row?.[field]) === String(value));
+    const wanted = String(value).trim().toLowerCase();
+    const hits = rows.filter(
+        (row) =>
+            String(row?.[field] ?? '')
+                .trim()
+                .toLowerCase() === wanted
+    );
 
     // Exactly one, or stop. A screenshot of the wrong driver is worse than no screenshot:
     // it is wrong in a way that survives review, because nothing about it looks broken.
@@ -33,8 +41,7 @@ export async function resolvePublicId({ apiHost, namespace = 'int/v1', token }, 
             .map((row) => `${row?.[field] ?? '?'}=${row?.public_id ?? '?'}`)
             .join(', ');
         throw new Error(
-            `resolve(${spec.resource}): expected exactly 1 record with ${field}="${value}", got ${hits.length}. ` +
-                `Checked ${rows.length} records. Candidates: ${sample || 'none'}`
+            `resolve(${spec.resource}): expected exactly 1 record with ${field}="${value}", got ${hits.length}. ` + `Checked ${rows.length} records. Candidates: ${sample || 'none'}`
         );
     }
 
@@ -76,13 +83,20 @@ async function getRows(url, headers) {
  */
 export async function resolveAll(api, entries) {
     const ids = {};
+    // One unresolvable record must not abort a fifty-entry run before the browser has even
+    // started; the entry is dropped and reported, and the caller decides the exit code.
+    const failures = {};
 
     for (const entry of entries) {
         if (!entry.resolve) continue;
-        ids[entry.id] = await resolvePublicId(api, entry.resolve);
+        try {
+            ids[entry.id] = await resolvePublicId(api, entry.resolve);
+        } catch (error) {
+            failures[entry.id] = error.message;
+        }
     }
 
-    return ids;
+    return { ids, failures };
 }
 
 /**

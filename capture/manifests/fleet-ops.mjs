@@ -55,6 +55,8 @@ const TABLE = '.next-table-wrapper';
 // completely empty table and publish a screenshot of the empty state. Excluding it is what
 // makes expectRows mean what it says.
 const TABLE_ROW = '.next-table-wrapper tbody tr:not(.next-table-empty-state-row)';
+// A Layout::Resource::Panel (detail/edit views) once it has slid open.
+const PANEL = '.next-content-overlay.is-open .next-content-overlay-panel';
 
 export default {
     area: 'fleet-ops',
@@ -353,6 +355,233 @@ export default {
             url: ({ publicId }) => `/fleet-ops/manage/trailers/${publicId}/equipment`,
             waitFor: '.next-content-overlay.is-open .next-content-overlay-panel',
             extraSettleMs: 1500,
+        },
+
+        // ── Pri-1 batch: screens the docs describe that need no new fixtures ───────────
+        // From COVERAGE.md → "Screenshots that do not exist yet". Settings pages regenerate
+        // library images; the rest are new names.
+        ...['avatars', 'notifications', 'payments', 'routing', 'scheduling', 'orchestrator', 'navigator-app', 'custom-fields', 'telematics'].map((page) => ({
+            id: `settings-${page}`,
+            file: {
+                avatars: 'fleet-ops-avatar-settings',
+                notifications: 'fleet-ops-notification-settings',
+                payments: 'fleet-ops-payment-settings',
+                routing: 'fleet-ops-routing-settings',
+                scheduling: 'fleet-ops-scheduling-settings',
+                orchestrator: 'fleet-ops-orchestrator-settings',
+                'navigator-app': 'fleet-ops-navigator-app-settings',
+                'custom-fields': 'fleet-ops-custom-fields',
+                telematics: 'fleet-ops-telematics-settings',
+            }[page],
+            url: `/fleet-ops/settings/${page}`,
+            waitFor: 'main form, main .content-panel, main',
+            extraSettleMs: 1200,
+        })),
+        {
+            id: 'vehicle-capacity',
+            file: 'fleet-ops-vehicle-capacity',
+            // resources/vehicles/capacity-and-payload: the edit form's Capacity & Dimensions
+            // block. JUR-07, the Hino that tows TRL-01.
+            resolve: { resource: 'vehicles', query: 'GBB-1007', match: { field: 'plate_number', value: 'GBB-1007' } },
+            url: ({ publicId }) => `/fleet-ops/manage/vehicles/edit/${publicId}`,
+            waitFor: PANEL,
+            interact: async (page) => {
+                await page.getByText('Capacity & Dimensions', { exact: false }).first().scrollIntoViewIfNeeded();
+            },
+            extraSettleMs: 1000,
+        },
+        {
+            id: 'integrated-vendor-new',
+            file: 'fleet-ops-integrated-vendor-new',
+            // resources/vendors/integrated-vendors: the provider picker.
+            url: '/fleet-ops/manage/vendors/integrated/new',
+            waitFor: PANEL,
+            extraSettleMs: 1000,
+        },
+        {
+            id: 'place-details',
+            file: 'fleet-ops-place-details',
+            resolve: { resource: 'places', query: 'Raffles Quay', match: { field: 'name', value: 'Raffles Quay' } },
+            url: ({ publicId }) => `/fleet-ops/manage/places/${publicId}`,
+            waitFor: PANEL,
+            map: { settleTiles: true },
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'place-operations',
+            file: 'fleet-ops-place-operations',
+            resolve: { resource: 'places', query: 'Raffles Quay', match: { field: 'name', value: 'Raffles Quay' } },
+            url: ({ publicId }) => `/fleet-ops/manage/places/${publicId}/operations`,
+            waitFor: PANEL,
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'order-config-new',
+            file: 'fleet-ops-order-config-new',
+            // operations/order-configurations/order-types: the New Order Config dialog.
+            url: '/fleet-ops/order-config',
+            waitFor: '.order-config-select-button',
+            interact: async (page) => {
+                await page
+                    .getByRole('button', { name: /new order config/i })
+                    .first()
+                    .click();
+            },
+            waitForAfterInteract: '.modal-dialog, .modal, [role="dialog"]:not(.next-content-overlay)',
+            extraSettleMs: 1000,
+        },
+        {
+            id: 'order-config-entities',
+            file: 'fleet-ops-order-config-entities',
+            url: '/fleet-ops/order-config',
+            waitFor: '.order-config-select-button',
+            interact: async (page) => {
+                await page.locator('.order-config-select-button').first().click();
+                await page.locator('a.next-dd-item', { hasText: 'Last-Mile Delivery' }).first().click();
+                await page
+                    .locator('.fleetops-pill-tabs .ui-tab', { hasText: /entities/i })
+                    .first()
+                    .click();
+            },
+            waitForAfterInteract: '.fleetops-pill-tabs .ui-tab.active',
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'order-update-activity',
+            file: 'fleet-ops-order-update-activity',
+            // operations/orders/order-lifecycle: the next-activity chooser on FLT-2007.
+            resolve: { resource: 'orders', query: 'FLT-2007', match: { field: 'internal_id', value: 'FLT-2007' } },
+            url: ({ publicId }) => `/fleet-ops/${publicId}`,
+            waitFor: PANEL,
+            interact: async (page) => {
+                await page
+                    .getByRole('button', { name: /update activity/i })
+                    .first()
+                    .click();
+            },
+            waitForAfterInteract: '.modal-dialog, .modal, .next-dd-menu, .ember-basic-dropdown-content',
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'order-new',
+            file: 'fleet-ops-order-new',
+            // operations/orders/managing-orders. Replaces the hand-made create-order shot.
+            url: '/fleet-ops/new',
+            waitFor: `${PANEL}, main form`,
+            map: { settleTiles: true },
+            extraSettleMs: 2000,
+        },
+        {
+            id: 'order-edit',
+            file: 'fleet-ops-order-edit',
+            resolve: { resource: 'orders', query: 'FLT-2007', match: { field: 'internal_id', value: 'FLT-2007' } },
+            url: ({ publicId }) => `/fleet-ops/edit/${publicId}`,
+            waitFor: `${PANEL}, main form`,
+            map: { settleTiles: true },
+            extraSettleMs: 2000,
+        },
+        {
+            id: 'zones',
+            file: 'fleet-ops-zones',
+            // operations/service-areas-geofences/zones: the live map with the service-area
+            // panel open (zones are drawn on the map already; the panel lists them).
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container',
+            interact: async (page) => {
+                await page.locator('#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]').first().click();
+            },
+            waitForAfterInteract: '.ember-basic-dropdown-content',
+            map: { settleTiles: true },
+            extraSettleMs: 2000,
+        },
+        {
+            id: 'work-order-details',
+            file: 'fleet-ops-work-order-details',
+            resolve: { resource: 'work-orders', query: 'FLT-WO-OPEN', match: { field: 'code', value: 'FLT-WO-OPEN' } },
+            url: ({ publicId }) => `/fleet-ops/maintenance/work-orders/${publicId}`,
+            waitFor: PANEL,
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'part-details',
+            file: 'fleet-ops-part-details',
+            resolve: { resource: 'parts', query: 'Donaldson P550', match: { field: 'name', value: 'Donaldson P550' } },
+            url: ({ publicId }) => `/fleet-ops/maintenance/parts/${publicId}`,
+            waitFor: PANEL,
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'equipment-details',
+            file: 'fleet-ops-equipment-details',
+            resolve: { resource: 'equipment', query: 'Carrier X4-7500', match: { field: 'name', value: 'Carrier X4-7500' } },
+            url: ({ publicId }) => `/fleet-ops/maintenance/equipment/${publicId}`,
+            waitFor: PANEL,
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'equipment-list',
+            file: 'fleet-ops-equipment-list',
+            url: '/fleet-ops/maintenance/equipment',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 5 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'parts-inventory',
+            file: 'fleet-ops-parts-inventory',
+            url: '/fleet-ops/maintenance/parts',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 2 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'maintenance-log',
+            file: 'fleet-ops-maintenance-log',
+            url: '/fleet-ops/maintenance/maintenances',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 2 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'device-details',
+            file: 'fleet-ops-device-details',
+            resolve: { resource: 'devices', query: 'DEV-CEN-001', match: { field: 'serial_number', value: 'DEV-CEN-001' } },
+            url: ({ publicId }) => `/fleet-ops/connectivity/devices/${publicId}`,
+            waitFor: PANEL,
+            extraSettleMs: 1500,
+        },
+        {
+            id: 'sensors-list',
+            file: 'fleet-ops-sensors-list',
+            url: '/fleet-ops/connectivity/sensors',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 2 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'device-events',
+            file: 'fleet-ops-device-events',
+            url: '/fleet-ops/connectivity/events',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 1 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'telematics-providers',
+            file: 'fleet-ops-telematics-providers',
+            url: '/fleet-ops/connectivity/telematics',
+            waitFor: TABLE,
+            expectRows: { selector: TABLE_ROW, min: 1 },
+            extraSettleMs: 500,
+        },
+        {
+            id: 'fuel-integrations',
+            file: 'fleet-ops-fuel-integrations',
+            // recipes/fuel-provider-integrations: the integrations page (intro/empty state
+            // is the honest picture until a provider is connected).
+            url: '/fleet-ops/connectivity/fuel-integrations',
+            waitFor: 'main',
+            extraSettleMs: 1200,
         },
     ],
 };
