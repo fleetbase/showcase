@@ -400,14 +400,6 @@ export default {
             extraSettleMs: 1500,
         },
         {
-            id: 'place-operations',
-            file: 'fleet-ops-place-operations',
-            resolve: { resource: 'places', query: 'Raffles Quay', match: { field: 'name', value: 'Raffles Quay' } },
-            url: ({ publicId }) => `/fleet-ops/manage/places/${publicId}/operations`,
-            waitFor: PANEL,
-            extraSettleMs: 1500,
-        },
-        {
             id: 'order-config-new',
             file: 'fleet-ops-order-config-create',
             // operations/order-configurations/order-types: the New Order Config dialog.
@@ -421,22 +413,6 @@ export default {
             },
             waitForAfterInteract: '.modal-dialog, .modal, [role="dialog"]:not(.next-content-overlay)',
             extraSettleMs: 1000,
-        },
-        {
-            id: 'order-config-entities',
-            file: 'fleet-ops-order-config-entities',
-            url: '/fleet-ops/order-config',
-            waitFor: '.order-config-select-button',
-            interact: async (page) => {
-                await page.locator('.order-config-select-button').first().click();
-                await page.locator('a.next-dd-item', { hasText: 'Last-Mile Delivery' }).first().click();
-                await page
-                    .locator('.fleetops-pill-tabs .ui-tab', { hasText: /entities/i })
-                    .first()
-                    .click();
-            },
-            waitForAfterInteract: '.fleetops-pill-tabs .ui-tab.active',
-            extraSettleMs: 1500,
         },
         {
             id: 'order-update-activity',
