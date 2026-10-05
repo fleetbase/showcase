@@ -379,7 +379,7 @@ export default {
         })),
         {
             id: 'vehicle-capacity',
-            file: 'fleet-ops-vehicle-capacity',
+            file: 'fleet-ops-vehicle-edit-capacity',
             // resources/vehicles/capacity-and-payload: the edit form's Capacity & Dimensions
             // block. JUR-07, the Hino that tows TRL-01.
             resolve: { resource: 'vehicles', query: 'GBB-1007', match: { field: 'plate_number', value: 'GBB-1007' } },
@@ -409,7 +409,7 @@ export default {
         },
         {
             id: 'order-config-new',
-            file: 'fleet-ops-order-config-new',
+            file: 'fleet-ops-order-config-create',
             // operations/order-configurations/order-types: the New Order Config dialog.
             url: '/fleet-ops/order-config',
             waitFor: '.order-config-select-button',
@@ -470,7 +470,7 @@ export default {
         },
         {
             id: 'zones',
-            file: 'fleet-ops-zones',
+            file: 'fleet-ops-zones-map',
             // operations/service-areas-geofences/zones: the live map with the service-area
             // panel open (zones are drawn on the map already; the panel lists them).
             url: '/fleet-ops',
@@ -548,7 +548,7 @@ export default {
         },
         {
             id: 'telematics-providers',
-            file: 'fleet-ops-telematics-providers',
+            file: 'fleet-ops-telematics-list',
             url: '/fleet-ops/connectivity/telematics',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 1 },
@@ -556,7 +556,7 @@ export default {
         },
         {
             id: 'fuel-integrations',
-            file: 'fleet-ops-fuel-integrations',
+            file: 'fleet-ops-fuel-integrations-list',
             // recipes/fuel-provider-integrations: the integrations page (intro/empty state
             // is the honest picture until a provider is connected).
             url: '/fleet-ops/connectivity/fuel-integrations',
