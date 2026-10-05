@@ -391,14 +391,6 @@ export default {
             extraSettleMs: 1000,
         },
         {
-            id: 'integrated-vendor-new',
-            file: 'fleet-ops-integrated-vendor-new',
-            // resources/vendors/integrated-vendors: the provider picker.
-            url: '/fleet-ops/manage/vendors/integrated/new',
-            waitFor: PANEL,
-            extraSettleMs: 1000,
-        },
-        {
             id: 'place-details',
             file: 'fleet-ops-place-details',
             resolve: { resource: 'places', query: 'Raffles Quay', match: { field: 'name', value: 'Raffles Quay' } },
@@ -453,13 +445,18 @@ export default {
             resolve: { resource: 'orders', query: 'FLT-2007', match: { field: 'internal_id', value: 'FLT-2007' } },
             url: ({ publicId }) => `/fleet-ops/${publicId}`,
             waitFor: PANEL,
+            // The panel header collapses its action buttons into one DropdownButton (ember-ui
+            // renders an `items` array as an ellipsis trigger), so "Update activity" is not a
+            // button on the page until that dropdown is open — the first attempt clicked a
+            // button that does not exist and timed out.
             interact: async (page) => {
+                await page.locator('.next-content-overlay.is-open .ember-basic-dropdown-trigger').first().click();
                 await page
-                    .getByRole('button', { name: /update activity/i })
+                    .getByText(/update activity/i)
                     .first()
                     .click();
             },
-            waitForAfterInteract: '.modal-dialog, .modal, .next-dd-menu, .ember-basic-dropdown-content',
+            waitForAfterInteract: '.modal-dialog, .modal-content, .ember-modal-dialog, [role="dialog"]:not(.next-content-overlay)',
             extraSettleMs: 1500,
         },
         {
@@ -467,15 +464,6 @@ export default {
             file: 'fleet-ops-order-new',
             // operations/orders/managing-orders. Replaces the hand-made create-order shot.
             url: '/fleet-ops/new',
-            waitFor: `${PANEL}, main form`,
-            map: { settleTiles: true },
-            extraSettleMs: 2000,
-        },
-        {
-            id: 'order-edit',
-            file: 'fleet-ops-order-edit',
-            resolve: { resource: 'orders', query: 'FLT-2007', match: { field: 'internal_id', value: 'FLT-2007' } },
-            url: ({ publicId }) => `/fleet-ops/edit/${publicId}`,
             waitFor: `${PANEL}, main form`,
             map: { settleTiles: true },
             extraSettleMs: 2000,
@@ -556,14 +544,6 @@ export default {
             url: '/fleet-ops/connectivity/sensors',
             waitFor: TABLE,
             expectRows: { selector: TABLE_ROW, min: 2 },
-            extraSettleMs: 500,
-        },
-        {
-            id: 'device-events',
-            file: 'fleet-ops-device-events',
-            url: '/fleet-ops/connectivity/events',
-            waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 1 },
             extraSettleMs: 500,
         },
         {

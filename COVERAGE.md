@@ -218,6 +218,17 @@ a different pipeline), `extension-development/**`, `extending-fleetbase/**`,
 `contributing/**`, `community/**`, `platform/quickstart/**` (deployment text):
 ~150 pages, correctly screenshot-free.
 
+## Known gaps in the Pri-1 batch
+
+Three entries were written, met a real stack, and were removed again. They are listed here
+rather than silently dropped, because each needs a different kind of work:
+
+| Entry | What happened | What it needs |
+|---|---|---|
+| `integrated-vendor-new` | `/manage/vendors/integrated/new` never finished loading — 240s deadline, empty DOM | Someone to open that route by hand and see what it waits for |
+| `order-edit` | There is no order `edit` route in fleetops 0.6.70; orders are edited from the details panel's action menu | Capture it through the panel's ellipsis menu instead |
+| `device-events` | `/connectivity/events` renders its empty state although `ConnectivitySeeder` creates two `DeviceEvent` rows with `company_uuid` and `occurred_at` set | Find why the list does not return them, then restore the entry |
+
 ## Recommended order of work
 
 0. **Trailers** — PR #7; the first entries that create images the library never had.
