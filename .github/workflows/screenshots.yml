@@ -219,6 +219,15 @@ jobs:
           restore-keys: |
             domhash-
 
+      # compare.mjs runs on the runner, not in the Playwright container — and the container
+      # keeps its node_modules in a named volume, so nothing has ever installed them here.
+      # Without this the compare step dies on `Cannot find package 'pixelmatch'` after a
+      # perfectly good capture, and no pull request is opened.
+      - name: Install compare dependencies
+        if: steps.cfg.outputs.open_pr == 'true'
+        working-directory: capture
+        run: npm ci --no-audit --no-fund
+
       - name: Compare against the published library
         if: steps.cfg.outputs.open_pr == 'true'
         id: compare
