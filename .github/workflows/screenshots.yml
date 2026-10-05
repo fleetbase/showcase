@@ -119,6 +119,20 @@ jobs:
 
       # Every Fleetbase image is pulled, never built — that is the point of screenshotting a
       # release rather than a branch. scripts/up.sh writes .env and waits on the healthchecks.
+      # compare.mjs runs on the runner, not in the Playwright container, and the container
+      # keeps its node_modules in a named volume — so nothing had ever installed them here
+      # and compare died on `Cannot find package 'pixelmatch'` after a perfectly good capture.
+      #
+      # It has to happen BEFORE anything starts a container: Docker creates
+      # capture/node_modules on the host as the mount point for that named volume, owned by
+      # root, and npm then cannot write into it (EACCES).
+      - name: Install compare dependencies
+        if: steps.cfg.outputs.open_pr == 'true'
+        working-directory: capture
+        run: |
+          npm ci --no-audit --no-fund
+          mkdir -p .cache/domhash
+
       - name: Start the stack
         env:
           RELEASE_TAG: ${{ steps.cfg.outputs.tag }}
@@ -167,6 +181,15 @@ jobs:
           # wrong-looking capture without a local stack. Cheap; always on.
           CAPTURE_DEBUG: '1'
         run: ./scripts/capture.sh ${{ steps.cfg.outputs.areas }}
+
+      # The capture container runs as root and writes into the bind-mounted capture/, so
+      # everything it produced — out/<area>/, .cache/tiles/ — is root-owned on the host.
+      # Every later step runs as the runner user, and the ones that only read (artifact
+      # upload, tile-cache save) are fine; compare is not, because it writes a diff/ directory
+      # beside the captures. Hand the output back rather than fixing it at each symptom.
+      - name: Take ownership of the capture output
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" capture/out capture/.cache 2>/dev/null || true
 
       # Unconditional: when a run fails partway, the screenshots it did manage are the fastest
       # way to see how far it got and what the failing screen looked like.
