@@ -147,8 +147,11 @@ trait SeedsStorefrontShowcaseData
         if ($publicId = $this->derivedPublicId($modelClass, $attributes)) {
             $attributes['public_id'] = $publicId;
         }
+        if ($internalId = $this->derivedInternalId($modelClass, $attributes)) {
+            $attributes['internal_id'] = $internalId;
+        }
         $attributes = $this->filterColumns($model, array_merge([
-            'uuid'       => (string) Str::uuid(),
+            'uuid'       => $this->derivedUuid($modelClass, $attributes) ?? (string) Str::uuid(),
             'created_at' => $this->timestamp(),
             'updated_at' => $this->timestamp(),
         ], $attributes));
@@ -187,6 +190,61 @@ trait SeedsStorefrontShowcaseData
         $type = $modelClass::getPublicIdType() ?: strtolower(class_basename($modelClass));
 
         return $type . '_' . substr(hash('sha256', 'public-id:' . $key), 0, 10);
+    }
+
+    /**
+     * The internal id HasInternalId would generate — the company's initials and six digits —
+     * with the digits derived from the seed key instead of random. Fleet-Ops lists print it
+     * (Internal ID column), so random digits changed those screenshots on every release.
+     */
+    protected function derivedInternalId(string $modelClass, array $attributes): ?string
+    {
+        if (isset($attributes['internal_id']) || !method_exists($modelClass, 'generateInternalId')) {
+            return null;
+        }
+
+        $key = $attributes['_key'] ?? null;
+        if (!$key && is_array($attributes['meta'] ?? null) && isset($attributes['meta']['seed_id'])) {
+            $key = ($attributes['meta']['seed'] ?? $this->seedName()) . ':' . $attributes['meta']['seed_id'];
+        }
+        if (!$key) {
+            return null;
+        }
+
+        // Same prefix rule as HasInternalId: first letters of the first two words of the
+        // company name, else its first two letters.
+        $prefix  = '';
+        $company = isset($attributes['company_uuid']) ? \Fleetbase\Models\Company::where('uuid', $attributes['company_uuid'])->first() : null;
+        if ($company) {
+            $words  = explode(' ', $company->name);
+            $prefix = count($words) > 1
+                ? strtoupper(mb_substr($words[0], 0, 1) . mb_substr($words[1], 0, 1))
+                : strtoupper(mb_substr($company->name, 0, 2));
+        }
+
+        $digits = str_pad((string) (hexdec(substr(hash('sha256', 'internal-id:' . $key), 0, 8)) % 1000000), 6, '0', STR_PAD_LEFT);
+
+        return $prefix . $digits;
+    }
+
+    /**
+     * A UUID derived from the model and seed key, so screens that print a record's uuid (the
+     * webhook details panel, QR codes built from an order's uuid) are the same on every run.
+     * v4-shaped. Null when the record has no seed key.
+     */
+    protected function derivedUuid(string $modelClass, array $attributes): ?string
+    {
+        $key = $attributes['_key'] ?? null;
+        if (!$key && is_array($attributes['meta'] ?? null) && isset($attributes['meta']['seed_id'])) {
+            $key = ($attributes['meta']['seed'] ?? $this->seedName()) . ':' . $attributes['meta']['seed_id'];
+        }
+        if (!$key) {
+            return null;
+        }
+
+        $h = hash('sha256', 'uuid:' . $modelClass . ':' . $key);
+
+        return substr($h, 0, 8) . '-' . substr($h, 8, 4) . '-4' . substr($h, 13, 3) . '-a' . substr($h, 17, 3) . '-' . substr($h, 20, 12);
     }
 
     protected function filterColumns(Model $model, array $attributes): array

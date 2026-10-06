@@ -73,6 +73,26 @@ try {
         ? \Illuminate\Support\Facades\DB::table('activity')->update(['created_at' => $frozen->copy()->subHours(3), 'updated_at' => $frozen->copy()->subHours(3)])
         : 0;
 
+    // Tracking numbers: TrackingNumberObserver::creating always generates a random one,
+    // overwriting whatever a seeder passed, and Storefront's orders get theirs from the order
+    // hooks. Order lists print them, so rewrite each seeded order's from its public id (itself
+    // derived from the seed key), keeping the generator's format: company prefix, ten digits,
+    // region.
+    $tracking = 0;
+    if (\Illuminate\Support\Facades\Schema::hasTable('tracking_numbers')) {
+        $prefix = strtoupper(substr($company->name, 0, 3));
+        $rows   = \Illuminate\Support\Facades\DB::table('orders')
+            ->join('tracking_numbers', 'tracking_numbers.uuid', '=', 'orders.tracking_number_uuid')
+            ->where('orders.company_uuid', $company->uuid)
+            ->select('tracking_numbers.uuid', 'orders.public_id', 'tracking_numbers.region')
+            ->get();
+        foreach ($rows as $row) {
+            $digits = str_pad((string) (hexdec(substr(hash('sha256', 'tracking:' . $row->public_id), 0, 12)) % 10000000000), 10, '0', STR_PAD_LEFT);
+            $tracking += \Illuminate\Support\Facades\DB::table('tracking_numbers')->where('uuid', $row->uuid)
+                ->update(['tracking_number' => $prefix . $digits . strtoupper($row->region ?: 'SG')]);
+        }
+    }
+
     // The opposite direction for drivers: their location age is measured against the SERVER
     // clock (TrackingContextBuilder: now() - drivers.updated_at), and nothing rendered reads
     // drivers.updated_at itself, so every driver is touched to real now — the offline one
@@ -100,6 +120,7 @@ try {
     echo 'FROZEN_IAM=' . $iam . PHP_EOL;
     echo 'FROZEN_WALLETS=' . $wallets . PHP_EOL;
     echo 'FROZEN_ACTIVITY=' . $activity . PHP_EOL;
+    echo 'FROZEN_TRACKING=' . $tracking . PHP_EOL;
     echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'FREEZE_ERROR=' . $e->getMessage() . PHP_EOL;
