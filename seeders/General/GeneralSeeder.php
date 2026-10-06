@@ -49,6 +49,7 @@ class GeneralSeeder extends Seeder
         $this->seedNotifications($owner);
         $this->seedChat($company, $owner);
         $this->seedDashboard($company, $owner);
+        $this->seedTwoFactor($company);
 
         $this->command?->info('Seeded ' . $this->seedName() . ' fixtures for company: ' . $company->public_id);
     }
@@ -69,6 +70,18 @@ class GeneralSeeder extends Seeder
             DashboardWidget::whereIn('dashboard_uuid', $dashboards)->forceDelete();
         }
         $this->purgeModel(Dashboard::class);
+    }
+
+    /**
+     * 2FA switched on — but not enforced — for the system and the organization. With it off,
+     * admin-two-factor-settings and console-organization-two-factor show a lone toggle and none
+     * of the settings worth documenting (method, enforcement). Not enforced, and the owner's
+     * own 2FA stays off, so logging in (scripts/capture.sh) still needs no code.
+     */
+    protected function seedTwoFactor(Company $company): void
+    {
+        \Fleetbase\Support\TwoFactorAuth::configureTwoFaSettings(['enabled' => true, 'method' => 'email', 'enforced' => false]);
+        \Fleetbase\Support\TwoFactorAuth::saveTwoFaSettingsForCompany($company, ['enabled' => true, 'method' => 'email', 'enforced' => false]);
     }
 
     /**

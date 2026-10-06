@@ -30,6 +30,9 @@ export default {
             interact: async (page) => {
                 // Pallet: free and not installed, so the modal shows the Install flow.
                 await page.locator(`${GRID} .card-img-lg[alt="Pallet"]`).first().click();
+                // The dialog frame appears before its content; one of two identical runs shot
+                // the empty frame.
+                await page.getByText('Inventory & warehouse management').last().waitFor({ state: 'visible' });
             },
             waitForAfterInteract: DIALOG,
             extraSettleMs: 1500,

@@ -38,13 +38,47 @@ try {
     // Bypass Eloquent: touching these through the model would fire observers and updated_at
     // would be rewritten to now() by the timestamps behaviour, which is the very thing being
     // frozen.
-    $users = \Illuminate\Support\Facades\DB::table('users')
-        ->where('company_uuid', $company->uuid)
-        ->update([
-            'last_login'  => $frozen->copy()->subHours(2),
-            'created_at'  => $frozen,
-            'updated_at'  => $frozen,
+    // Staggered, not one shared value: lists sort by created_at, and rows that tie come back in
+    // whatever order MySQL picks — the IAM users and groups lists reordered between two
+    // identical runs. Ordered by email (name for groups) so the stagger is the same every run.
+    $users = 0;
+    foreach (\Illuminate\Support\Facades\DB::table('users')->where('company_uuid', $company->uuid)->orderBy('email')->pluck('uuid') as $i => $uuid) {
+        $at     = $frozen->copy()->subMinutes(7 * $i);
+        $users += \Illuminate\Support\Facades\DB::table('users')->where('uuid', $uuid)->update([
+            'last_login' => $at->copy()->subHours(2),
+            'created_at' => $at,
+            'updated_at' => $at,
         ]);
+    }
+    if (\Illuminate\Support\Facades\Schema::hasTable('groups')) {
+        foreach (\Illuminate\Support\Facades\DB::table('groups')->where('company_uuid', $company->uuid)->orderBy('name')->pluck('uuid') as $i => $uuid) {
+            \Illuminate\Support\Facades\DB::table('groups')->where('uuid', $uuid)->update(['created_at' => $frozen->copy()->subDays(30)->subMinutes(11 * $i)]);
+        }
+    }
+
+    // Orders: the seeders restore statuses with query updates that stamp updated_at with the
+    // wall clock (order details prints "Updated <time>"), and some orders share created_at, so
+    // the board's columns reordered between identical runs. Break created_at ties by public id
+    // (derived from the seed key) and put updated_at a fixed five minutes after it.
+    $orders = 0;
+    $prevAt = null;
+    $tie    = 0;
+    foreach (\Illuminate\Support\Facades\DB::table('orders')->where('company_uuid', $company->uuid)->whereNull('deleted_at')->orderBy('created_at')->orderBy('public_id')->get(['uuid', 'created_at']) as $order) {
+        $tie    = $order->created_at === $prevAt ? $tie + 1 : 0;
+        $prevAt = $order->created_at;
+        $at     = \Illuminate\Support\Carbon::parse($order->created_at)->addSeconds($tie);
+        $orders += \Illuminate\Support\Facades\DB::table('orders')->where('uuid', $order->uuid)->update(['created_at' => $at, 'updated_at' => $at->copy()->addMinutes(5)]);
+    }
+
+    // The developers webhook details panel lists delivery attempts and API events. Seeding
+    // other areas fires real order events at the seeded .example endpoints, adding rows with
+    // wall-clock times and random ids. The seeded rows are dated January 2026; drop the rest.
+    $runtime = 0;
+    foreach (['webhook_request_logs', 'api_events'] as $table) {
+        if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
+            $runtime += \Illuminate\Support\Facades\DB::table($table)->where('company_uuid', $company->uuid)->where('created_at', '>', '2026-03-01')->delete();
+        }
+    }
 
     $companies = \Illuminate\Support\Facades\DB::table('companies')
         ->where('uuid', $company->uuid)
@@ -73,6 +107,26 @@ try {
         ? \Illuminate\Support\Facades\DB::table('activity')->update(['created_at' => $frozen->copy()->subHours(3), 'updated_at' => $frozen->copy()->subHours(3)])
         : 0;
 
+    // Tracking numbers: TrackingNumberObserver::creating always generates a random one,
+    // overwriting whatever a seeder passed, and Storefront's orders get theirs from the order
+    // hooks. Order lists print them, so rewrite each seeded order's from its public id (itself
+    // derived from the seed key), keeping the generator's format: company prefix, ten digits,
+    // region.
+    $tracking = 0;
+    if (\Illuminate\Support\Facades\Schema::hasTable('tracking_numbers')) {
+        $prefix = strtoupper(substr($company->name, 0, 3));
+        $rows   = \Illuminate\Support\Facades\DB::table('orders')
+            ->join('tracking_numbers', 'tracking_numbers.uuid', '=', 'orders.tracking_number_uuid')
+            ->where('orders.company_uuid', $company->uuid)
+            ->select('tracking_numbers.uuid', 'orders.public_id', 'tracking_numbers.region')
+            ->get();
+        foreach ($rows as $row) {
+            $digits = str_pad((string) (hexdec(substr(hash('sha256', 'tracking:' . $row->public_id), 0, 12)) % 10000000000), 10, '0', STR_PAD_LEFT);
+            $tracking += \Illuminate\Support\Facades\DB::table('tracking_numbers')->where('uuid', $row->uuid)
+                ->update(['tracking_number' => $prefix . $digits . strtoupper($row->region ?: 'SG')]);
+        }
+    }
+
     // The opposite direction for drivers: their location age is measured against the SERVER
     // clock (TrackingContextBuilder: now() - drivers.updated_at), and nothing rendered reads
     // drivers.updated_at itself, so every driver is touched to real now — the offline one
@@ -92,7 +146,10 @@ try {
         ->where('company_uuid', $company->uuid)
         ->where('online', 1)
         ->whereNull('deleted_at')
-        ->update(['last_online_at' => \Illuminate\Support\Carbon::now()]);
+        // Two hours ahead, not now: the badge flips from Online to "Recently offline" a few
+        // minutes after last_online_at, and the trailer screens are captured minutes after
+        // this runs — two identical runs disagreed on it.
+        ->update(['last_online_at' => \Illuminate\Support\Carbon::now()->addHours(2)]);
 
     echo PHP_EOL . 'FROZEN_USERS=' . $users . PHP_EOL;
     echo 'FRESHENED_TRAILERS=' . $trailers . PHP_EOL;
@@ -100,6 +157,9 @@ try {
     echo 'FROZEN_IAM=' . $iam . PHP_EOL;
     echo 'FROZEN_WALLETS=' . $wallets . PHP_EOL;
     echo 'FROZEN_ACTIVITY=' . $activity . PHP_EOL;
+    echo 'FROZEN_TRACKING=' . $tracking . PHP_EOL;
+    echo 'DROPPED_RUNTIME_EVENTS=' . $runtime . PHP_EOL;
+    echo 'FROZEN_ORDERS=' . $orders . PHP_EOL;
     echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'FREEZE_ERROR=' . $e->getMessage() . PHP_EOL;
