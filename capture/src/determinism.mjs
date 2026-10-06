@@ -86,6 +86,11 @@ export function contextOptions({ viewport = DEFAULT_VIEWPORT, theme = 'dark' } =
         // The console is served from a different origin than the API in the compose stack;
         // capture is a trusted local context, so do not let a CSP block the init scripts.
         bypassCSP: true,
+        // The realtime screens dial wss://<host>:38000, which the proxy terminates with Caddy's
+        // internal CA (docker/caddy/Caddyfile). Without this the handshake fails and
+        // admin-socket-settings shows "Socket connection error!". Safe: the listener only fronts
+        // a container on the private compose network.
+        ignoreHTTPSErrors: true,
     };
 }
 
@@ -403,6 +408,20 @@ export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlock
 
         if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
         if (isLocalOrigin(url, { baseUrl, apiHost })) {
+            // Opening a chat message saves a read receipt, which turns the header's unread
+            // badge from 2 to 1 for every screen captured after it — so the badge depended on
+            // entry order and on whether the chat entry succeeded. Acknowledge the receipt
+            // without persisting it.
+            if (request.method() === 'POST' && /\/int\/v1\/chat-receipts\b/.test(url)) {
+                let body = {};
+                try {
+                    body = JSON.parse(request.postData() || '{}');
+                } catch {
+                    /* echo an empty receipt */
+                }
+                const receipt = { ...(body.chatReceipt ?? body.chat_receipt ?? {}), id: 'showcase-receipt', uuid: 'showcase-receipt' };
+                return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ chatReceipt: receipt }) });
+            }
             const pinned = pinReportDates(url);
             return pinned ? route.continue({ url: pinned }) : route.continue();
         }
