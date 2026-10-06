@@ -428,7 +428,8 @@ export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlock
             const box = /\/engines-dist\/images\/boxes\/([a-z-]+\.png)$/.exec(new URL(url).pathname);
             if (box) {
                 const response = await route.fetch().catch(() => null);
-                if (response && response.ok()) return route.fulfill({ response });
+                // ok() is not enough: an unknown path gets the console's index.html with a 200.
+                if (response && response.ok() && (response.headers()['content-type'] || '').startsWith('image/')) return route.fulfill({ response });
                 onBlocked?.(url, 'console returned no parcel box image; served capture/fixtures/boxes');
                 const body = await readFile(path.join(FIXTURES, 'boxes', box[1])).catch(() => null);
                 if (body) return route.fulfill({ status: 200, contentType: 'image/png', body });

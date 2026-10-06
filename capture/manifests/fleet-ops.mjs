@@ -82,9 +82,17 @@ const rateDetails = (id, file, name) => ({
 // toolbar panel; the first run of these entries showed menus and a feed over a bare map.
 const SERVICE_AREAS_BUTTON = '#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]';
 const showServiceAreas = async (page) => {
+    // The polygons are registered hidden as they load; "show all" only reveals layers that
+    // already exist, so clicking before they arrive is a silent no-op (it was, in the second
+    // run). Wait for all seven — three areas, four zones — then for one to be visible.
+    await page.waitForFunction(() => document.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive').length >= 7, null, { timeout: 30000 });
     await page.locator(SERVICE_AREAS_BUTTON).first().click();
     await page.getByText('Show all Service Areas').first().click();
-    await page.locator('.leaflet-overlay-pane path').first().waitFor({ state: 'attached' });
+    await page.waitForFunction(
+        () => [...document.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive')].some((p) => p.style.display !== 'none'),
+        null,
+        { timeout: 15000 }
+    );
 };
 // Visibility may persist; hide them again so other live-map screens are unaffected.
 const hideServiceAreas = async (page) => {
