@@ -46,10 +46,12 @@ x-api-env: &api-env
   REGISTRY_HOST: https://registry.fleetbase.io
   REGISTRY_PREINSTALLED_EXTENSIONS: "true"
   OSRM_HOST: https://router.project-osrm.org
-  # Order ETAs: Fleet-Ops tries Google Routes (no key here), then OSRM, then its own
-  # calculation. The public OSRM demo server answers some requests and refuses others under
-  # load, so the live map's ETA badges flipped between "Low ETA Confidence" and "Fallback ETA"
-  # across identical runs — 0.3% of the pixels, enough to republish. Skip it.
+  # Order ETAs: by default Fleet-Ops tries Google Routes (no key here), then the public OSRM
+  # demo server, then its own calculation, and badges anything not from the first as
+  # "Fallback ETA". Which one answered varied run to run (OSRM refuses some requests under
+  # load; results are cached), so the live map's badges flipped between "Fallback ETA" and
+  # "Low ETA Confidence" — 0.3% of the pixels, enough to republish. Use the calculation alone.
+  TRACKING_PROVIDER: calculated
   TRACKING_PROVIDER_FALLBACKS: calculated
   # Optional. With a key here, Fleet-Ops can switch its live map to Google Maps: the console
   # never sees the key in config — it asks the API (fleet-ops/settings/map), which reads it
