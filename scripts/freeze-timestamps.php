@@ -56,6 +56,20 @@ try {
         }
     }
 
+    // Orders: the seeders restore statuses with query updates that stamp updated_at with the
+    // wall clock (order details prints "Updated <time>"), and some orders share created_at, so
+    // the board's columns reordered between identical runs. Break created_at ties by public id
+    // (derived from the seed key) and put updated_at a fixed five minutes after it.
+    $orders = 0;
+    $prevAt = null;
+    $tie    = 0;
+    foreach (\Illuminate\Support\Facades\DB::table('orders')->where('company_uuid', $company->uuid)->whereNull('deleted_at')->orderBy('created_at')->orderBy('public_id')->get(['uuid', 'created_at']) as $order) {
+        $tie    = $order->created_at === $prevAt ? $tie + 1 : 0;
+        $prevAt = $order->created_at;
+        $at     = \Illuminate\Support\Carbon::parse($order->created_at)->addSeconds($tie);
+        $orders += \Illuminate\Support\Facades\DB::table('orders')->where('uuid', $order->uuid)->update(['created_at' => $at, 'updated_at' => $at->copy()->addMinutes(5)]);
+    }
+
     // The developers webhook details panel lists delivery attempts and API events. Seeding
     // other areas fires real order events at the seeded .example endpoints, adding rows with
     // wall-clock times and random ids. The seeded rows are dated January 2026; drop the rest.
@@ -132,7 +146,10 @@ try {
         ->where('company_uuid', $company->uuid)
         ->where('online', 1)
         ->whereNull('deleted_at')
-        ->update(['last_online_at' => \Illuminate\Support\Carbon::now()]);
+        // Two hours ahead, not now: the badge flips from Online to "Recently offline" a few
+        // minutes after last_online_at, and the trailer screens are captured minutes after
+        // this runs — two identical runs disagreed on it.
+        ->update(['last_online_at' => \Illuminate\Support\Carbon::now()->addHours(2)]);
 
     echo PHP_EOL . 'FROZEN_USERS=' . $users . PHP_EOL;
     echo 'FRESHENED_TRAILERS=' . $trailers . PHP_EOL;
@@ -142,6 +159,7 @@ try {
     echo 'FROZEN_ACTIVITY=' . $activity . PHP_EOL;
     echo 'FROZEN_TRACKING=' . $tracking . PHP_EOL;
     echo 'DROPPED_RUNTIME_EVENTS=' . $runtime . PHP_EOL;
+    echo 'FROZEN_ORDERS=' . $orders . PHP_EOL;
     echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'FREEZE_ERROR=' . $e->getMessage() . PHP_EOL;

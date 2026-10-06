@@ -175,11 +175,17 @@ Automated today, but the data or state on screen is wrong. Fix before relying on
 
 ## Determinism
 
-Two identical runs on 2026-10-06 differed in 45 of 287 screens. Fixed in
-`fix/deterministic-internal-ids`: random internal ids, uuids and tracking numbers; ties in the
-IAM users and groups sort order; the chat read receipt that changed the unread badge mid-run;
-runtime webhook events. Still variable, but small enough to stay under the compare's
-pixel threshold: trailer last-online times and order elapsed timers (server-clock values).
+Two identical runs should produce identical screenshots, or every release opens a noise PR.
+On 2026-10-06 they differed in 45 of 287 screens; `fix/deterministic-internal-ids` removes:
+random public/internal ids, uuids and tracking numbers; created_at ties that reordered the IAM
+users and groups lists and the orders board; the chat read receipt that changed the unread
+badge mid-run; webhook events fired during seeding; wall-clock order `updated_at`; trailer
+badges flipping to "Recently offline" during the capture; the extension dialog shot before its
+content rendered.
+
+Still variable, small enough to stay under the compare's pixel threshold (they never publish on
+their own): order elapsed timers, the trailer last-online time, the live map's ETA badge (the API
+asks the public OSRM server, whose answers vary), and markup-only differences.
 
 ## Regenerating
 
