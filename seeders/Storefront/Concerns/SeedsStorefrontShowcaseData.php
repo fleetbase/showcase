@@ -143,7 +143,10 @@ trait SeedsStorefrontShowcaseData
     protected function createRecord(string $modelClass, array $attributes, bool $withoutEvents = false): Model
     {
         /** @var Model $model */
-        $model      = new $modelClass();
+        $model = new $modelClass();
+        if ($publicId = $this->derivedPublicId($modelClass, $attributes)) {
+            $attributes['public_id'] = $publicId;
+        }
         $attributes = $this->filterColumns($model, array_merge([
             'uuid'       => (string) Str::uuid(),
             'created_at' => $this->timestamp(),
@@ -159,6 +162,31 @@ trait SeedsStorefrontShowcaseData
         }
 
         return $model;
+    }
+
+    /**
+     * A public id derived from the record's seed key, for models that would otherwise get a
+     * random one on every run. Fleet-Ops lists print the ID column (vehicle_dxaf8kyj6a), so a
+     * random id made those screenshots differ on every release for no reason. HasPublicId
+     * keeps a preset value. Null when the record has no seed key, or the model no public id.
+     */
+    protected function derivedPublicId(string $modelClass, array $attributes): ?string
+    {
+        if (isset($attributes['public_id']) || !method_exists($modelClass, 'getPublicIdType')) {
+            return null;
+        }
+
+        $key = $attributes['_key'] ?? null;
+        if (!$key && is_array($attributes['meta'] ?? null) && isset($attributes['meta']['seed_id'])) {
+            $key = ($attributes['meta']['seed'] ?? $this->seedName()) . ':' . $attributes['meta']['seed_id'];
+        }
+        if (!$key) {
+            return null;
+        }
+
+        $type = $modelClass::getPublicIdType() ?: strtolower(class_basename($modelClass));
+
+        return $type . '_' . substr(hash('sha256', 'public-id:' . $key), 0, 10);
     }
 
     protected function filterColumns(Model $model, array $attributes): array
