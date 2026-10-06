@@ -70,6 +70,31 @@ try {
         $orders += \Illuminate\Support\Facades\DB::table('orders')->where('uuid', $order->uuid)->update(['created_at' => $at, 'updated_at' => $at->copy()->addMinutes(5)]);
     }
 
+    // Order ETA provider, pinned at company level — the highest stored level Fleet-Ops reads
+    // (TrackingOptions: request, then company setting, then system setting, then env). With
+    // only env set, the live map's badges still flipped between "Fallback ETA" and "Low ETA
+    // Confidence" across identical runs. The local calculation needs no external service.
+    // Alerts carried over (or Fleet-Ops' own defaults): a company row without them would turn
+    // off the tracking alerts Radar counts on the dashboard.
+    $trackingKey = 'company.' . $company->uuid . '.tracking';
+    $existing    = \Fleetbase\Models\Setting::lookup($trackingKey, []);
+    $alerts      = is_array($existing) ? data_get($existing, 'alerts') : null;
+    if (!$alerts) {
+        $defaults = new \ReflectionMethod(\Fleetbase\FleetOps\Http\Controllers\Internal\v1\SettingController::class, 'trackingAlertDefaults');
+        $defaults->setAccessible(true);
+        $alerts = $defaults->invoke(app(\Fleetbase\FleetOps\Http\Controllers\Internal\v1\SettingController::class));
+    }
+    \Fleetbase\Models\Setting::configure($trackingKey, [
+        'alerts'                           => $alerts,
+        'provider'                         => 'calculated',
+        'fallbacks'                        => ['calculated'],
+        'traffic_enabled'                  => false,
+        'cache_ttl_seconds'                => 60,
+        'route_cache_ttl_seconds'          => 600,
+        'stale_location_threshold_seconds' => 300,
+        'default_vehicle_speed_kph'        => 35,
+    ]);
+
     // The developers webhook details panel lists delivery attempts and API events. Seeding
     // other areas fires real order events at the seeded .example endpoints, adding rows with
     // wall-clock times and random ids. The seeded rows are dated January 2026; drop the rest.
