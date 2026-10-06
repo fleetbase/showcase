@@ -19,6 +19,7 @@ use Fleetbase\FleetOps\Models\Place;
 use Fleetbase\FleetOps\Models\ServiceArea;
 use Fleetbase\FleetOps\Models\ServiceRate;
 use Fleetbase\FleetOps\Models\ServiceRateFee;
+use Fleetbase\FleetOps\Models\ServiceRateParcelFee;
 use Fleetbase\FleetOps\Models\Vendor;
 use Fleetbase\FleetOps\Models\Zone;
 use Database\Seeders\Showcase\Concerns\SeedsShowcaseData;
@@ -58,6 +59,7 @@ class NetworkSeeder extends Seeder
 
     public function purgeSeedData(): void
     {
+        $this->purgeModel(ServiceRateParcelFee::class);
         $this->purgeModel(ServiceRateFee::class);
         $this->purgeModel(ServiceRate::class);
         $this->purgeModel(Vendor::class);
@@ -67,18 +69,30 @@ class NetworkSeeder extends Seeder
         $this->purgeModel(ServiceArea::class);
     }
 
+    /**
+     * Three service areas that tile the island along real district lines, and four zones
+     * inside them. Shaped, not rectangles: these are drawn on the live map, in the service
+     * area editor and behind the geofence feed, and the published screenshots showed
+     * axis-aligned boxes over the sea. [lat, lng] rings, roughly following the coast and the
+     * expressways.
+     */
     protected function seedServiceAreas(Company $company): void
     {
         $areas = [
             'central_service_area' => [
                 'name'   => 'Singapore Central',
-                'border' => [[1.2700, 103.8000], [1.2700, 103.9100], [1.3600, 103.9100], [1.3600, 103.8000]],
+                'border' => [[1.2655, 103.8025], [1.2705, 103.8340], [1.2760, 103.8610], [1.2905, 103.8790], [1.3120, 103.8935], [1.3420, 103.8925], [1.3690, 103.8770], [1.3805, 103.8450], [1.3760, 103.8120], [1.3470, 103.7880], [1.3110, 103.7795], [1.2830, 103.7840]],
                 'color'  => '#2563eb',
             ],
             'east_service_area' => [
                 'name'   => 'Singapore East',
-                'border' => [[1.3050, 103.9000], [1.3050, 104.0200], [1.3950, 104.0200], [1.3950, 103.9000]],
+                'border' => [[1.3120, 103.8935], [1.3020, 103.9190], [1.3080, 103.9520], [1.3200, 103.9790], [1.3400, 104.0080], [1.3720, 104.0140], [1.3930, 103.9890], [1.3960, 103.9480], [1.3870, 103.9080], [1.3690, 103.8770], [1.3420, 103.8925]],
                 'color'  => '#059669',
+            ],
+            'west_service_area' => [
+                'name'   => 'Singapore West',
+                'border' => [[1.2830, 103.7840], [1.3110, 103.7795], [1.3470, 103.7880], [1.3760, 103.7620], [1.3840, 103.7180], [1.3640, 103.6720], [1.3300, 103.6440], [1.2960, 103.6500], [1.2780, 103.6880], [1.2730, 103.7380]],
+                'color'  => '#ea580c',
             ],
         ];
 
@@ -106,21 +120,27 @@ class NetworkSeeder extends Seeder
         $zones = [
             'cbd_zone' => [
                 'service_area' => 'central_service_area',
-                'name'         => 'Marina Bay',
-                'border'       => [[1.2760, 103.8350], [1.2760, 103.8650], [1.3050, 103.8650], [1.3050, 103.8350]],
+                'name'         => 'CBD',
+                'border'       => [[1.2700, 103.8420], [1.2725, 103.8560], [1.2800, 103.8640], [1.2920, 103.8650], [1.3005, 103.8585], [1.2985, 103.8470], [1.2880, 103.8395], [1.2780, 103.8385]],
                 'color'        => '#7c3aed',
+            ],
+            'orchard_zone' => [
+                'service_area' => 'central_service_area',
+                'name'         => 'Orchard',
+                'border'       => [[1.2985, 103.8255], [1.3000, 103.8375], [1.3050, 103.8440], [1.3110, 103.8395], [1.3115, 103.8280], [1.3065, 103.8215]],
+                'color'        => '#db2777',
             ],
             'airport_zone' => [
                 'service_area' => 'east_service_area',
                 'name'         => 'Changi',
-                'border'       => [[1.3350, 103.9600], [1.3350, 104.0100], [1.3850, 104.0100], [1.3850, 103.9600]],
+                'border'       => [[1.3340, 103.9760], [1.3370, 104.0000], [1.3540, 104.0080], [1.3720, 104.0040], [1.3810, 103.9860], [1.3660, 103.9660], [1.3480, 103.9640]],
                 'color'        => '#dc2626',
             ],
             'warehouse_zone' => [
-                'service_area' => 'central_service_area',
+                'service_area' => 'west_service_area',
                 'name'         => 'Jurong',
-                'border'       => [[1.3000, 103.7800], [1.3000, 103.8300], [1.3450, 103.8300], [1.3450, 103.7800]],
-                'color'        => '#ea580c',
+                'border'       => [[1.3160, 103.7060], [1.3220, 103.7400], [1.3380, 103.7480], [1.3540, 103.7380], [1.3560, 103.7130], [1.3400, 103.6960], [1.3240, 103.6950]],
+                'color'        => '#f59e0b',
             ],
         ];
 
@@ -250,44 +270,145 @@ class NetworkSeeder extends Seeder
         return $models;
     }
 
+    /**
+     * One service rate per calculation method, each filled in the way the rate editor saves
+     * it, so every docs page under operations/service-rates has a real screen: fixed distance
+     * tiers, per kilometre, per drop-off ranges, multi-zone distance rules, parcel sizes and an
+     * algorithm. Amounts in cents, SGD.
+     */
     protected function seedServiceRates(Company $company, array $vendors): void
     {
         $orderConfig = FleetOps::createTransportConfig($company);
-        $rates       = [
-            'same_day_cbd'    => ['Same Day CBD', 'same_day', 'central_service_area', 'cbd_zone', 1200, 120, 1],
-            'airport_express' => ['Airport Express', 'express', 'east_service_area', 'airport_zone', 2800, 180, 0],
-        ];
 
-        foreach ($rates as $seedId => [$name, $type, $areaSeedId, $zoneSeedId, $baseFee, $perMeter, $estimatedDays]) {
-            $serviceRate = $this->createRecord(ServiceRate::class, [
-                '_key'                    => $this->fixtureKey($seedId),
-                'company_uuid'            => $company->uuid,
-                'service_area_uuid'       => $this->seededServiceArea($areaSeedId)?->uuid,
-                'zone_uuid'               => $this->seededZone($zoneSeedId)?->uuid,
-                'order_config_uuid'       => $orderConfig->uuid,
-                'service_name'            => $name,
-                'service_type'            => $type,
-                'base_fee'                => $baseFee,
-                'per_meter_flat_rate_fee' => $perMeter,
-                'per_meter_unit'          => 'm',
-                'algorithm'               => 'fixed_meter',
-                'rate_calculation_method' => 'fixed_meter',
-                'currency'                => 'SGD',
-                'duration_terms'          => 'days',
-                'estimated_days'          => $estimatedDays,
-            ]);
+        $rate = function (string $seedId, array $attributes) use ($company, $orderConfig): ServiceRate {
+            return $this->createRecord(ServiceRate::class, array_merge([
+                '_key'              => $this->fixtureKey($seedId),
+                'company_uuid'      => $company->uuid,
+                'order_config_uuid' => $orderConfig->uuid,
+                'service_type'      => 'transport',
+                'currency'          => 'SGD',
+                'duration_terms'    => 'days',
+                'estimated_days'    => 0,
+            ], $attributes));
+        };
+        $fee = function (ServiceRate $serviceRate, string $seedId, array $attributes): void {
+            $this->createRecord(ServiceRateFee::class, array_merge([
+                '_key'              => $this->fixtureKey($seedId),
+                'service_rate_uuid' => $serviceRate->uuid,
+                'currency'          => 'SGD',
+            ], $attributes));
+        };
 
-            foreach ([['parcel', 1, 5, 400], ['parcel', 6, 20, 900]] as $index => [$unit, $min, $max, $fee]) {
-                $this->createRecord(ServiceRateFee::class, [
-                    '_key'              => $this->fixtureKey($seedId . '_fee_' . ($index + 1)),
-                    'service_rate_uuid' => $serviceRate->uuid,
-                    'min'               => $min,
-                    'max'               => $max,
-                    'unit'              => $unit,
-                    'fee'               => $fee,
-                    'currency'          => 'SGD',
-                ]);
-            }
+        // Fixed rate: a flat fee per distance tier, up to 10 km.
+        $sameDay = $rate('same_day_cbd', [
+            'service_name'            => 'Same Day CBD',
+            'service_area_uuid'       => $this->seededServiceArea('central_service_area')?->uuid,
+            'zone_uuid'               => $this->seededZone('cbd_zone')?->uuid,
+            'rate_calculation_method' => 'fixed_meter',
+            'algorithm'               => 'fixed_meter',
+            'base_fee'                => 400,
+            'max_distance'            => 10,
+            'max_distance_unit'       => 'km',
+            'has_cod_fee'             => true,
+            'cod_calculation_method'  => 'flat',
+            'cod_flat_fee'            => 150,
+        ]);
+        foreach (range(1, 10) as $km) {
+            $fee($sameDay, 'same_day_cbd_fee_' . $km, ['distance' => $km, 'distance_unit' => 'km', 'fee' => 500 + 100 * $km]);
         }
+
+        // Per kilometre, with an evening peak surcharge.
+        $rate('airport_express', [
+            'service_name'                  => 'Airport Express',
+            'service_area_uuid'             => $this->seededServiceArea('east_service_area')?->uuid,
+            'zone_uuid'                     => $this->seededZone('airport_zone')?->uuid,
+            'rate_calculation_method'       => 'per_meter',
+            'algorithm'                     => 'per_meter',
+            'base_fee'                      => 1200,
+            'per_meter_flat_rate_fee'       => 95,
+            'per_meter_unit'                => 'km',
+            'has_peak_hours_fee'            => true,
+            'peak_hours_calculation_method' => 'percentage',
+            'peak_hours_percent'            => 20,
+            'peak_hours_start'              => '17:00',
+            'peak_hours_end'                => '20:00',
+        ]);
+
+        // Per drop-off: the fee grows with the number of stops on the order.
+        $multiDrop = $rate('multi_drop_saver', [
+            'service_name'            => 'Multi-Drop Saver',
+            'rate_calculation_method' => 'per_drop',
+            'algorithm'               => 'per_drop',
+            'base_fee'                => 300,
+        ]);
+        foreach ([[1, 2, 500], [3, 5, 900], [6, 10, 1400], [11, 20, 2200]] as $i => [$min, $max, $amount]) {
+            $fee($multiDrop, 'multi_drop_saver_fee_' . ($i + 1), ['min' => $min, 'max' => $max, 'unit' => 'waypoint', 'fee' => $amount]);
+        }
+
+        // Multi-zone distance: each stretch of the route priced by the area or zone it is in.
+        $zonal = $rate('island_zonal', [
+            'service_name'            => 'Island-wide Zonal',
+            'rate_calculation_method' => 'multi_zone_distance',
+            'algorithm'               => 'multi_zone_distance',
+            'base_fee'                => 300,
+        ]);
+        $rules = [
+            ['CBD premium', null, 'cbd_zone', 30, 200],
+            ['Changi airport', null, 'airport_zone', 30, 180],
+            ['Central district', 'central_service_area', null, 20, 125],
+            ['East district', 'east_service_area', null, 20, 110],
+            ['West district', 'west_service_area', null, 20, 105],
+        ];
+        foreach ($rules as $i => [$label, $areaSeedId, $zoneSeedId, $priority, $amount]) {
+            $fee($zonal, 'island_zonal_rule_' . ($i + 1), [
+                'label'             => $label,
+                'service_area_uuid' => $areaSeedId ? $this->seededServiceArea($areaSeedId)?->uuid : null,
+                'zone_uuid'         => $zoneSeedId ? $this->seededZone($zoneSeedId)?->uuid : null,
+                'priority'          => $priority,
+                'is_fallback'       => false,
+                'distance_unit'     => 'km',
+                'fee'               => $amount,
+            ]);
+        }
+        $fee($zonal, 'island_zonal_fallback', ['label' => 'Outside service areas', 'priority' => 0, 'is_fallback' => true, 'distance_unit' => 'km', 'fee' => 100]);
+
+        // Parcel: a fee per parcel size.
+        $parcel = $rate('parcel_standard', [
+            'service_name'            => 'Parcel Standard',
+            'service_type'            => 'parcel',
+            'rate_calculation_method' => 'parcel',
+            'algorithm'               => 'parcel',
+            'base_fee'                => 200,
+            'estimated_days'          => 1,
+        ]);
+        $sizes = [
+            ['small', 34, 18, 10, 2, 500],
+            ['medium', 34, 32, 10, 4, 800],
+            ['large', 34, 32, 34, 10, 1200],
+            ['x-large', 50, 40, 40, 20, 1800],
+        ];
+        foreach ($sizes as [$size, $length, $width, $height, $weight, $amount]) {
+            $this->createRecord(ServiceRateParcelFee::class, [
+                '_key'              => $this->fixtureKey('parcel_standard_' . $size),
+                'service_rate_uuid' => $parcel->uuid,
+                'size'              => $size,
+                'length'            => $length,
+                'width'             => $width,
+                'height'            => $height,
+                'dimensions_unit'   => 'cm',
+                'weight'            => $weight,
+                'weight_unit'       => 'kg',
+                'fee'               => $amount,
+                'currency'          => 'SGD',
+            ]);
+        }
+
+        // Algorithm: a formula over distance, extra stops and weight (result in cents).
+        $rate('dynamic_pricing', [
+            'service_name'            => 'Dynamic Pricing',
+            'rate_calculation_method' => 'algo',
+            'algorithm'               => '( {distance_km} * 90 ) + ( max( {stops} - 2, 0 ) * 250 ) + ( max( {weight_kg} - 20, 0 ) * 12 )',
+            'base_fee'                => 300,
+        ]);
     }
 }

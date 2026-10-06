@@ -99,7 +99,8 @@ try {
     // other areas fires real order events at the seeded .example endpoints, adding rows with
     // wall-clock times and random ids. The seeded rows are dated January 2026; drop the rest.
     $runtime = 0;
-    foreach (['webhook_request_logs', 'api_events'] as $table) {
+    // geofence_event_logs too: driver positions set during seeding can trip live detection.
+    foreach (['webhook_request_logs', 'api_events', 'geofence_event_logs'] as $table) {
         if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
             $runtime += \Illuminate\Support\Facades\DB::table($table)->where('company_uuid', $company->uuid)->where('created_at', '>', '2026-03-01')->delete();
         }

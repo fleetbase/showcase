@@ -58,6 +58,33 @@ const TABLE_ROW = '.next-table-wrapper tbody tr:not(.next-table-empty-state-row)
 // A Layout::Resource::Panel (detail/edit views) once it has slid open.
 const PANEL = '.next-content-overlay.is-open .next-content-overlay-panel';
 
+// A seeded service rate (NetworkSeeder::seedServiceRates), opened in its editor or details panel.
+const serviceRate = (name) => ({ resource: 'service-rates', query: name, match: { field: 'service_name', value: name } });
+const rateEditor = (id, file, name, extra = {}) => ({
+    id,
+    file,
+    resolve: serviceRate(name),
+    url: ({ publicId }) => `/fleet-ops/service-rates/edit/${publicId}`,
+    waitFor: PANEL,
+    extraSettleMs: 1500,
+    ...extra,
+});
+const rateDetails = (id, file, name) => ({
+    id,
+    file,
+    resolve: serviceRate(name),
+    url: ({ publicId }) => `/fleet-ops/service-rates/${publicId}`,
+    waitFor: PANEL,
+    extraSettleMs: 1500,
+});
+
+// The live map's Service Areas toolbar panel, with one area's action submenu open.
+const openServiceAreaMenu = async (page, areaName) => {
+    await page.locator('#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]').first().click();
+    await page.locator('.next-dd-item', { hasText: areaName }).first().click();
+    await page.getByText(`Edit Boundaries: ${areaName}`).first().waitFor({ state: 'visible' });
+};
+
 export default {
     area: 'fleet-ops',
 
@@ -202,7 +229,67 @@ export default {
             file: 'fleet-ops-service-rate-list',
             url: '/fleet-ops/service-rates',
             waitFor: TABLE,
-            expectRows: { selector: TABLE_ROW, min: 2 },
+            expectRows: { selector: TABLE_ROW, min: 6 },
+        },
+        // operations/service-rates/*: one seeded rate per calculation method, in its editor.
+        rateDetails('service-rate-details', 'fleet-ops-service-rate-details', 'Same Day CBD'),
+        rateEditor('service-rate-fixed-rate', 'fleet-ops-service-rate-fixed-rate', 'Same Day CBD'),
+        rateEditor('service-rate-per-meter', 'fleet-ops-service-rate-per-meter', 'Airport Express'),
+        rateEditor('service-rate-per-drop', 'fleet-ops-service-rate-per-drop', 'Multi-Drop Saver'),
+        rateEditor('service-rate-multi-zone-distance', 'fleet-ops-service-rate-multi-zone-distance', 'Island-wide Zonal'),
+        rateDetails('service-rate-multi-zone-distance-details', 'fleet-ops-service-rate-multi-zone-distance-details', 'Island-wide Zonal'),
+        rateEditor('service-rate-parcel', 'fleet-ops-service-rate-parcel', 'Parcel Standard'),
+        rateEditor('service-rate-algorithm', 'fleet-ops-service-rate-algorithm', 'Dynamic Pricing', {
+            // The formula and its variable list sit below the rate details; bring them up.
+            interact: async (page) => {
+                await page.locator(`${PANEL} textarea, ${PANEL} .code-editor, ${PANEL} [contenteditable]`).last().scrollIntoViewIfNeeded();
+            },
+        }),
+        {
+            // operations/service-areas-geofences/service-areas: the toolbar panel listing the
+            // service areas, with Singapore Central's actions open.
+            id: 'service-area-controls',
+            file: 'fleet-ops-service-area-controls',
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container',
+            interact: (page) => openServiceAreaMenu(page, 'Singapore Central'),
+            map: { settleTiles: true },
+            extraSettleMs: 1500,
+        },
+        {
+            // ...and the same area in edit-boundaries mode: dashed outline, draggable handles.
+            id: 'service-area-edit',
+            file: 'fleet-ops-service-area-edit',
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container',
+            interact: async (page) => {
+                await openServiceAreaMenu(page, 'Singapore Central');
+                await page.getByText('Edit Boundaries: Singapore Central').first().click();
+            },
+            waitForAfterInteract: '.leaflet-editing-icon',
+            map: { settleTiles: true },
+            extraSettleMs: 1500,
+        },
+        {
+            // README and platform pages: service areas and zones on the live map, with the
+            // drawer open on the Geofences feed (ConnectivitySeeder::seedGeofenceEvents).
+            id: 'geofences-map',
+            file: 'fleet-ops-geofences-map',
+            url: '/fleet-ops',
+            waitFor: '.leaflet-container',
+            interact: async (page) => {
+                await page.locator('.notch').first().dblclick();
+                await page.getByRole('tab', { name: /geofences/i }).first().click();
+            },
+            waitForAfterInteract: '.geofence-events-panel',
+            expectRows: { selector: '.geofence-events-panel .divide-y > div', min: 6 },
+            map: { settleTiles: true },
+            extraSettleMs: 2000,
+            // The drawer's open state is persisted (app cache); minimise it again so the
+            // other live-map screens are unaffected.
+            cleanup: async (page) => {
+                await page.locator('.notch').first().dblclick();
+            },
         },
         {
             id: 'scheduler',
