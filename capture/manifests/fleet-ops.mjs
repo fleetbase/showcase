@@ -78,9 +78,25 @@ const rateDetails = (id, file, name) => ({
     extraSettleMs: 1500,
 });
 
+// The live map draws no service areas until "Show all Service Areas" is picked from the
+// toolbar panel; the first run of these entries showed menus and a feed over a bare map.
+const SERVICE_AREAS_BUTTON = '#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]';
+const showServiceAreas = async (page) => {
+    await page.locator(SERVICE_AREAS_BUTTON).first().click();
+    await page.getByText('Show all Service Areas').first().click();
+    await page.locator('.leaflet-overlay-pane path').first().waitFor({ state: 'attached' });
+};
+// Visibility may persist; hide them again so other live-map screens are unaffected.
+const hideServiceAreas = async (page) => {
+    await page.keyboard.press('Escape');
+    await page.locator(SERVICE_AREAS_BUTTON).first().click();
+    await page.getByText('Hide all Service Areas').first().click();
+};
+
 // The live map's Service Areas toolbar panel, with one area's action submenu open.
 const openServiceAreaMenu = async (page, areaName) => {
-    await page.locator('#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]').first().click();
+    await showServiceAreas(page);
+    await page.locator(SERVICE_AREAS_BUTTON).first().click();
     await page.locator('.next-dd-item', { hasText: areaName }).first().click();
     await page.getByText(`Edit Boundaries: ${areaName}`).first().waitFor({ state: 'visible' });
 };
@@ -255,6 +271,7 @@ export default {
             interact: (page) => openServiceAreaMenu(page, 'Singapore Central'),
             map: { settleTiles: true },
             extraSettleMs: 1500,
+            cleanup: hideServiceAreas,
         },
         {
             // ...and the same area in edit-boundaries mode: dashed outline, draggable handles.
@@ -269,6 +286,7 @@ export default {
             waitForAfterInteract: '.leaflet-editing-icon',
             map: { settleTiles: true },
             extraSettleMs: 1500,
+            cleanup: hideServiceAreas,
         },
         {
             // README and platform pages: service areas and zones on the live map, with the
@@ -278,6 +296,7 @@ export default {
             url: '/fleet-ops',
             waitFor: '.leaflet-container',
             interact: async (page) => {
+                await showServiceAreas(page);
                 await page.locator('.notch').first().dblclick();
                 await page.getByRole('tab', { name: /geofences/i }).first().click();
             },
@@ -289,6 +308,7 @@ export default {
             // other live-map screens are unaffected.
             cleanup: async (page) => {
                 await page.locator('.notch').first().dblclick();
+                await hideServiceAreas(page);
             },
         },
         {
@@ -539,9 +559,11 @@ export default {
             url: '/fleet-ops',
             waitFor: '.leaflet-container',
             interact: async (page) => {
-                await page.locator('#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]').first().click();
+                await showServiceAreas(page);
+                await page.locator(SERVICE_AREAS_BUTTON).first().click();
             },
             waitForAfterInteract: '.ember-basic-dropdown-content',
+            cleanup: hideServiceAreas,
             map: { settleTiles: true },
             extraSettleMs: 2000,
         },

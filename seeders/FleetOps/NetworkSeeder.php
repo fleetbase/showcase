@@ -313,8 +313,9 @@ class NetworkSeeder extends Seeder
             'cod_calculation_method'  => 'flat',
             'cod_flat_fee'            => 150,
         ]);
-        foreach (range(1, 10) as $km) {
-            $fee($sameDay, 'same_day_cbd_fee_' . $km, ['distance' => $km, 'distance_unit' => 'km', 'fee' => 500 + 100 * $km]);
+        // Tiers numbered the way the editor generates them: distance d covers d to d+1 km.
+        foreach (range(0, 9) as $km) {
+            $fee($sameDay, 'same_day_cbd_fee_' . ($km + 1), ['distance' => $km, 'distance_unit' => 'km', 'fee' => 600 + 100 * $km]);
         }
 
         // Per kilometre, with an evening peak surcharge.
@@ -366,11 +367,12 @@ class NetworkSeeder extends Seeder
                 'zone_uuid'         => $zoneSeedId ? $this->seededZone($zoneSeedId)?->uuid : null,
                 'priority'          => $priority,
                 'is_fallback'       => false,
+                'unit'              => 'multi_zone_distance', // the console only lists rules with this unit
                 'distance_unit'     => 'km',
                 'fee'               => $amount,
             ]);
         }
-        $fee($zonal, 'island_zonal_fallback', ['label' => 'Outside service areas', 'priority' => 0, 'is_fallback' => true, 'distance_unit' => 'km', 'fee' => 100]);
+        $fee($zonal, 'island_zonal_fallback', ['label' => 'Outside service areas', 'priority' => 0, 'is_fallback' => true, 'unit' => 'multi_zone_distance', 'distance_unit' => 'km', 'fee' => 100]);
 
         // Parcel: a fee per parcel size.
         $parcel = $rate('parcel_standard', [
