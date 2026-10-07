@@ -422,6 +422,18 @@ export async function installRoutes(page, { baseUrl, apiHost, tileCache, onBlock
                 const receipt = { ...(body.chatReceipt ?? body.chat_receipt ?? {}), id: 'showcase-receipt', uuid: 'showcase-receipt' };
                 return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ chatReceipt: receipt }) });
             }
+            // The parcel rate editor loads /engines-dist/images/boxes/<size>.png, which the
+            // published console did not serve (broken images in the first capture). Serve
+            // Fleet-Ops' own box images, but only when the console's request actually fails.
+            const box = /\/engines-dist\/images\/boxes\/([a-z-]+\.png)$/.exec(new URL(url).pathname);
+            if (box) {
+                const response = await route.fetch().catch(() => null);
+                // ok() is not enough: an unknown path gets the console's index.html with a 200.
+                if (response && response.ok() && (response.headers()['content-type'] || '').startsWith('image/')) return route.fulfill({ response });
+                onBlocked?.(url, 'console returned no parcel box image; served capture/fixtures/boxes');
+                const body = await readFile(path.join(FIXTURES, 'boxes', box[1])).catch(() => null);
+                if (body) return route.fulfill({ status: 200, contentType: 'image/png', body });
+            }
             const pinned = pinReportDates(url);
             return pinned ? route.continue({ url: pinned }) : route.continue();
         }

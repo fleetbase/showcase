@@ -56,10 +56,13 @@ class ConnectivitySeeder extends Seeder
 
     public function purgeSeedData(): void
     {
-        if ($zone = $this->seededZone('cbd_zone')) {
-            GeofenceEventLog::where('geofence_uuid', $zone->uuid)
-                ->whereIn('event_type', ['entered', 'dwelled', 'exited'])
-                ->delete();
+        // The log has no tag column; its rows go with the seeded geofences they point at.
+        $geofences = array_filter(array_merge(
+            array_map(fn ($id) => $this->seededServiceArea($id)?->uuid, ['central_service_area', 'east_service_area', 'west_service_area']),
+            array_map(fn ($id) => $this->seededZone($id)?->uuid, ['cbd_zone', 'orchard_zone', 'airport_zone', 'warehouse_zone'])
+        ));
+        if ($geofences) {
+            GeofenceEventLog::whereIn('geofence_uuid', $geofences)->delete();
         }
 
         $this->purgeModel(DeviceEvent::class);
@@ -197,32 +200,59 @@ class ConnectivitySeeder extends Seeder
         }
     }
 
+    /**
+     * A morning of geofence crossings for the live map's Geofences drawer: three drivers and
+     * their vans moving between the service areas and zones NetworkSeeder draws. Positions are
+     * on the boundaries they cross. occurred_at hours after the fixture anchor, oldest first.
+     */
     protected function seedGeofenceEvents(Company $company): void
     {
-        $driver  = $this->seededModel(Driver::class, 'driver_ava');
-        $vehicle = $this->seededModel(Vehicle::class, 'van_central');
-        $order   = $this->seededModel(Order::class, 'order_dispatched');
-        $zone    = $this->seededZone('cbd_zone');
+        $order = $this->seededModel(Order::class, 'order_dispatched');
+        $areas = fn (string $id) => $this->seededServiceArea($id);
+        $zones = fn (string $id) => $this->seededZone($id);
 
-        if (!$driver || !$zone) {
-            return;
-        }
+        // [driver seed id, vehicle seed id, geofence, type, event, lat, lng, speed, dwell minutes, minutes after 08:00]
+        $feed = [
+            ['driver_ava', 'van_central', $areas('central_service_area'), 'service_area', 'entered', 1.2905, 103.8790, 38, null, 12],
+            ['driver_ava', 'van_central', $zones('cbd_zone'), 'zone', 'entered', 1.2920, 103.8650, 24, null, 21],
+            ['driver_ken', 'van_east', $areas('east_service_area'), 'service_area', 'entered', 1.3420, 103.8925, 44, null, 26],
+            ['driver_ava', 'van_central', $zones('cbd_zone'), 'zone', 'dwelled', 1.2816, 103.8510, 0, 18, 40],
+            ['driver_ken', 'van_east', $zones('airport_zone'), 'zone', 'entered', 1.3480, 103.9640, 36, null, 47],
+            ['driver_mira', null, $areas('west_service_area'), 'service_area', 'entered', 1.3470, 103.7880, 41, null, 55],
+            ['driver_ava', 'van_central', $zones('cbd_zone'), 'zone', 'exited', 1.3005, 103.8585, 27, null, 63],
+            ['driver_ava', 'van_central', $zones('orchard_zone'), 'zone', 'entered', 1.3000, 103.8375, 19, null, 71],
+            ['driver_mira', null, $zones('warehouse_zone'), 'zone', 'entered', 1.3380, 103.7480, 32, null, 78],
+            ['driver_ken', 'van_east', $zones('airport_zone'), 'zone', 'dwelled', 1.3644, 103.9915, 0, 25, 86],
+            ['driver_mira', null, $zones('warehouse_zone'), 'zone', 'dwelled', 1.3345, 103.7420, 0, 14, 97],
+            ['driver_ken', 'van_east', $zones('airport_zone'), 'zone', 'exited', 1.3660, 103.9660, 33, null, 104],
+        ];
 
-        foreach (['entered', 'dwelled', 'exited'] as $index => $eventType) {
+        foreach ($feed as $i => [$driverSeedId, $vehicleSeedId, $geofence, $geofenceType, $eventType, $lat, $lng, $speed, $dwell, $minutes]) {
+            $driver  = $this->seededModel(Driver::class, $driverSeedId);
+            $vehicle = $vehicleSeedId ? $this->seededModel(Vehicle::class, $vehicleSeedId) : null;
+            if (!$driver || !$geofence) {
+                continue;
+            }
+
             $this->createRecord(GeofenceEventLog::class, [
-                'company_uuid'             => $company->uuid,
-                'driver_uuid'              => $driver->uuid,
-                'vehicle_uuid'             => $vehicle?->uuid,
-                'order_uuid'               => $order?->uuid,
-                'geofence_uuid'            => $zone->uuid,
-                'geofence_type'            => 'zone',
-                'geofence_name'            => 'Marina Bay',
-                'event_type'               => $eventType,
-                'latitude'                 => 1.2821,
-                'longitude'                => 103.8510,
-                'speed_kmh'                => $eventType === 'dwelled' ? 0 : 22,
-                'dwell_duration_minutes'   => $eventType === 'dwelled' ? 18 : null,
-                'occurred_at'              => $this->timestamp($index),
+                'uuid'                   => $this->derivedUuid(GeofenceEventLog::class, ['_key' => $this->fixtureKey('geofence_event_' . ($i + 1))]),
+                'company_uuid'           => $company->uuid,
+                'driver_uuid'            => $driver->uuid,
+                'vehicle_uuid'           => $vehicle?->uuid,
+                'order_uuid'             => $driverSeedId === 'driver_ava' ? $order?->uuid : null,
+                'subject_uuid'           => $driver->uuid,
+                'subject_type'           => 'driver',
+                'subject_name'           => $driver->name,
+                'geofence_uuid'          => $geofence->uuid,
+                'geofence_type'          => $geofenceType,
+                'geofence_name'          => $geofence->name,
+                'event_type'             => $eventType,
+                'latitude'               => $lat,
+                'longitude'              => $lng,
+                'speed_kmh'              => $speed,
+                'dwell_duration_minutes' => $dwell,
+                'occurred_at'            => $this->timestamp()->addMinutes($minutes),
+                'created_at'             => $this->timestamp()->addMinutes($minutes),
             ]);
         }
     }
