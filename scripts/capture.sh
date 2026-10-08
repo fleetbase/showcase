@@ -70,6 +70,14 @@ if [[ -z "$TOKEN" ]]; then
 fi
 echo "::add-mask::${TOKEN}"
 
+# The scheduler sends any Storefront campaign whose send_at has passed, and the freeze below
+# moves scheduled campaigns onto capture time (January 2026), which is in the past to the
+# server. Seeding is over, so nothing needs it from here on; stopping it also removes one more
+# background job that could change a screen mid-run. `docker compose start scheduler` brings
+# it back on a local stack.
+echo "==> Stopping the scheduler for the capture"
+docker compose stop scheduler >/dev/null 2>&1 || true
+
 echo "==> Freezing server-side timestamps"
 # Redirected rather than `base64 -i <file>`: -i means "read this file" on macOS but
 # "--ignore-garbage" in GNU coreutils, so the macOS spelling is a portability trap for a script
