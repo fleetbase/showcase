@@ -95,6 +95,21 @@ try {
         'default_vehicle_speed_kph'        => 35,
     ]);
 
+    // Scheduled Storefront campaigns: seeded a year ahead of the real clock so the scheduler
+    // could not send them during seeding; capture.sh has stopped it by now. Put each on the
+    // capture's calendar, meta.send_in_days after 2026-01-20, so the campaigns list reads
+    // "scheduled in N days" against the browser's frozen clock.
+    $campaigns = 0;
+    if (class_exists(\Fleetbase\Storefront\Models\Campaign::class)) {
+        $captureDay = \Illuminate\Support\Carbon::parse('2026-01-20 10:00:00', 'Asia/Singapore');
+        foreach (\Fleetbase\Storefront\Models\Campaign::where('company_uuid', $company->uuid)->where('status', 'scheduled')->get() as $campaign) {
+            $days = (int) data_get($campaign->meta, 'send_in_days', 0);
+            if ($days > 0) {
+                $campaigns += \Fleetbase\Storefront\Models\Campaign::where('uuid', $campaign->uuid)->update(['send_at' => $captureDay->copy()->addDays($days)->utc()->format('Y-m-d H:i:s')]);
+            }
+        }
+    }
+
     // The developers webhook details panel lists delivery attempts and API events. Seeding
     // other areas fires real order events at the seeded .example endpoints, adding rows with
     // wall-clock times and random ids. The seeded rows are dated January 2026; drop the rest.
@@ -186,6 +201,7 @@ try {
     echo 'FROZEN_TRACKING=' . $tracking . PHP_EOL;
     echo 'DROPPED_RUNTIME_EVENTS=' . $runtime . PHP_EOL;
     echo 'FROZEN_ORDERS=' . $orders . PHP_EOL;
+    echo 'FROZEN_CAMPAIGNS=' . $campaigns . PHP_EOL;
     echo 'FRESHENED_DRIVERS=' . $drivers . PHP_EOL;
 } catch (\Throwable $e) {
     echo PHP_EOL . 'FREEZE_ERROR=' . $e->getMessage() . PHP_EOL;

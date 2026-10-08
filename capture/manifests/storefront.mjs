@@ -19,6 +19,18 @@ const click = (name) => async (p) => {
     await p.getByRole('button', { name }).first().click();
 };
 const form = (id, file, url, name) => ({ id, file, url, waitFor: MAIN, interact: click(name), waitForAfterInteract: FORM, extraSettleMs: 1200 });
+// A seeded row's edit modal, opened from the anchor in its name cell.
+const rowEditor = (id, file, url, rowName) => ({
+    id,
+    file,
+    url,
+    waitFor: TABLE,
+    interact: async (p) => {
+        await p.locator(TABLE_ROW).filter({ hasText: rowName }).first().locator('a').first().click();
+    },
+    waitForAfterInteract: FORM,
+    extraSettleMs: 1200,
+});
 
 export default {
     area: 'storefront',
@@ -106,6 +118,17 @@ export default {
         page('food-trucks', 'storefront-food-trucks-list', '/storefront/food-trucks', { extraSettleMs: 2500 }),
         form('food-truck-create', 'storefront-food-truck-create', '/storefront/food-trucks', /new food truck|^\s*new\s*$/i),
         page('push-notifications', 'storefront-push-notifications', '/storefront/promotions/push-notifications'),
+
+        // ── Promotions, campaigns, segments (seeded by SeedsStorefrontFixtures::seedMarketing) ──
+        // Lists are Fleetbase Market's own: four promotions in every state, two segments, a sent,
+        // a scheduled and a draft campaign. Edit forms open by clicking a row's name.
+        { id: 'promotions', file: 'storefront-promotions-list', url: '/storefront/promotions', waitFor: TABLE, expectRows: { selector: TABLE_ROW, min: 3 }, extraSettleMs: 1500 },
+        form('promotion-create', 'storefront-promotion-create', '/storefront/promotions', /new promotion/i),
+        rowEditor('promotion-edit', 'storefront-promotion-edit', '/storefront/promotions', 'Coffee hour'),
+        { id: 'campaigns', file: 'storefront-campaigns-list', url: '/storefront/promotions/campaigns', waitFor: TABLE, expectRows: { selector: TABLE_ROW, min: 3 }, extraSettleMs: 1500 },
+        rowEditor('campaign-edit', 'storefront-campaign-edit', '/storefront/promotions/campaigns', 'Harvest week'),
+        { id: 'segments', file: 'storefront-segments-list', url: '/storefront/promotions/segments', waitFor: TABLE, expectRows: { selector: TABLE_ROW, min: 2 }, extraSettleMs: 1500 },
+        rowEditor('segment-edit', 'storefront-segment-edit', '/storefront/promotions/segments', 'Regulars'),
 
         // ── Settings ───────────────────────────────────────────────────────────────────
         page('settings', 'storefront-settings', '/storefront/settings'),

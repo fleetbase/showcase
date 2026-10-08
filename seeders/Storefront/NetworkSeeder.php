@@ -74,10 +74,20 @@ class NetworkSeeder extends Seeder
 
             $orders = $this->seedStoreActivity($company, $bundle, $customers, $network, $definition['order_count'] ?? 6);
             $orderCount += count($orders);
-            $bundles[] = $bundle;
+            $bundles[$definition['key']] = $bundle;
+        }
+
+        $marketing = $this->seedMarketing($company, $network, static::NETWORK_KEY, $this->marketingDefinition(), $bundles);
+        foreach ($this->storeMarketingDefinitions() as $storeKey => $definition) {
+            if (isset($bundles[$storeKey])) {
+                foreach ($this->seedMarketing($company, $bundles[$storeKey]['store'], $storeKey, $definition, $bundles) as $kind => $records) {
+                    $marketing[$kind] = array_merge($marketing[$kind], array_values($records));
+                }
+            }
         }
 
         $this->command?->info(sprintf('Seeded Storefront testing network for company %s with %d stores and %d orders.', $company->public_id, count($bundles), $orderCount));
+        $this->command?->info(sprintf('  Marketing: %d promotions, %d segments, %d campaigns.', count($marketing['promotions']), count($marketing['segments']), count($marketing['campaigns'])));
         $this->reportStorefront($network, $gateway, '  ');
         foreach ($bundles as $bundle) {
             $this->reportStorefront($bundle['store'], $bundle['gateway'], '    ');
@@ -255,6 +265,59 @@ class NetworkSeeder extends Seeder
                     'mixed-bouquet' => ['name' => 'Seasonal Mixed Bouquet', 'description' => 'Florist choice of seasonal stems.', 'price' => 4800, 'category' => 'bouquets', 'tags' => ['seasonal'], 'variants' => [['name' => 'Size', 'required' => true, 'options' => [['Petite', 0], ['Standard', 1500], ['Grand', 3500]]]], 'addon_categories' => ['gift']],
                 ],
                 'catalog' => ['name' => 'Marina Flowers Catalog', 'categories' => ['Bouquets' => ['rose-bouquet', 'mixed-bouquet']]],
+            ],
+        ];
+    }
+
+    /**
+     * Network-wide promotions, segments and campaigns, from Storefront's testing seeders. Its
+     * service stores are not ported (their products have no photos here), so the upcoming
+     * promotion is Lunar New Year instead of the services launch: on the capture's
+     * 2026-01-20 it is genuinely four weeks away.
+     */
+    protected function marketingDefinition(): array
+    {
+        return [
+            'promotions' => [
+                'welcome'       => ['name' => 'Welcome to Fleetbase Marketplace', 'description' => '15% off your first order, up to S$10.', 'type' => 'percentage', 'value' => 15, 'max_discount_amount' => 1000, 'min_subtotal' => 2000, 'first_order_only' => true, 'code' => 'WELCOME15', 'usage_limit_per_customer' => 1, 'starts_in_days' => -30, 'ends_in_days' => 60],
+                'free-delivery' => ['name' => 'Free delivery over S$40', 'description' => 'Delivery is on us when your basket is S$40 or more.', 'type' => 'free_delivery', 'min_subtotal' => 4000, 'starts_in_days' => -14, 'ends_in_days' => 30, 'priority' => 5],
+                'weekend-five'  => ['name' => 'S$5 off weekend orders', 'description' => 'Every Saturday and Sunday, S$5 off orders of S$25 or more.', 'type' => 'fixed_amount', 'value' => 500, 'min_subtotal' => 2500, 'schedule' => [['days' => [6, 7], 'start' => '00:00', 'end' => '23:59']], 'starts_in_days' => -7, 'ends_in_days' => 45],
+                'lunar-new-year' => ['name' => 'Lunar New Year feast', 'description' => '12% off grocers and restaurants for the festive week.', 'type' => 'percentage', 'value' => 12, 'max_discount_amount' => 2000, 'applies_to' => ['stores' => ['orchard-grocers', 'rochor-noodle-house', 'tampines-fresh-mart']], 'starts_in_days' => 26, 'ends_in_days' => 33],
+                'year-end-sale' => ['name' => 'Year-end sale', 'description' => '10% off everything (ended).', 'type' => 'percentage', 'value' => 10, 'starts_in_days' => -40, 'ends_in_days' => -10],
+                'vip-preview'   => ['name' => 'VIP preview (draft)', 'description' => 'Not published yet.', 'type' => 'percentage', 'value' => 25, 'status' => 'draft', 'is_public' => false, 'code' => 'VIPPREVIEW'],
+            ],
+            'segments' => [
+                'loyal'      => ['name' => 'Loyal customers', 'description' => 'Three or more orders.', 'rules' => ['min_orders' => 3]],
+                'recent'     => ['name' => 'Ordered this month', 'description' => 'At least one order in the last 30 days.', 'rules' => ['ordered_within_days' => 30]],
+                'lapsed'     => ['name' => 'Lapsed customers', 'description' => 'Ordered before, but not in the last 14 days.', 'rules' => ['not_ordered_within_days' => 14]],
+                'never'      => ['name' => 'Never ordered', 'description' => 'Signed up but no orders yet.', 'rules' => ['max_orders' => 0]],
+                'push-ready' => ['name' => 'Push enabled', 'description' => 'Customers with a registered push device.', 'rules' => ['has_push_device' => true]],
+            ],
+            'campaigns' => [
+                'welcome-sent'  => ['name' => 'Welcome offer', 'title' => '15% off your first order', 'body' => 'Use WELCOME15 at checkout. Ends soon.', 'status' => 'sent', 'segment' => 'never', 'promotion' => 'welcome', 'action' => ['type' => 'promotion'], 'sent_days_ago' => 3, 'stats' => ['targeted' => 4, 'batches' => 1]],
+                'delivery-sent' => ['name' => 'Free delivery week', 'title' => 'Free delivery over S$40', 'body' => 'Stock up this week, delivery is on us.', 'status' => 'sent', 'segment' => 'loyal', 'promotion' => 'free-delivery', 'action' => ['type' => 'promotion'], 'sent_days_ago' => 1, 'stats' => ['targeted' => 12, 'batches' => 1]],
+                'lny-soon'      => ['name' => 'Lunar New Year feast', 'title' => 'Feast for less this Lunar New Year', 'body' => '12% off grocers and restaurants for the festive week.', 'status' => 'scheduled', 'segment' => 'recent', 'promotion' => 'lunar-new-year', 'action' => ['type' => 'promotion'], 'send_in_days' => 24],
+                'winback-draft' => ['name' => 'We miss you (draft)', 'title' => 'Come back for S$5 off', 'body' => 'Here is S$5 off your next weekend order.', 'status' => 'draft', 'segment' => 'lapsed', 'promotion' => 'weekend-five'],
+            ],
+        ];
+    }
+
+    /** Promotions and campaigns owned by individual member stores, by store key. */
+    protected function storeMarketingDefinitions(): array
+    {
+        return [
+            'orchard-grocers' => [
+                'promotions' => [
+                    'bakery-happy-hour' => ['name' => 'Bakery happy hour', 'description' => '30% off bakery, weekdays 5 to 8 pm.', 'type' => 'percentage', 'value' => 30, 'applies_to' => ['categories' => ['orchard-grocers:bakery']], 'schedule' => [['days' => [1, 2, 3, 4, 5], 'start' => '17:00', 'end' => '20:00']], 'starts_in_days' => -10, 'ends_in_days' => 50],
+                ],
+                'campaigns' => [
+                    'bakery-sent' => ['name' => 'Bakery happy hour', 'title' => '30% off fresh bread after 5', 'body' => 'Sourdough and croissants, weekdays 5 to 8 pm.', 'status' => 'sent', 'promotion' => 'bakery-happy-hour', 'action' => ['type' => 'product', 'ref' => 'orchard-grocers:sourdough'], 'sent_days_ago' => 2, 'stats' => ['targeted' => 8, 'batches' => 1]],
+                ],
+            ],
+            'rochor-noodle-house' => [
+                'promotions' => [
+                    'dumpling-bogo' => ['name' => 'Buy 2 dumplings, get 1 free', 'description' => 'On any dumpling plate.', 'type' => 'bogo', 'bogo_config' => ['buy_quantity' => 2, 'get_quantity' => 1, 'discount_percent' => 100], 'applies_to' => ['products' => ['rochor-noodle-house:pork-dumplings', 'rochor-noodle-house:veg-dumplings']], 'starts_in_days' => -5, 'ends_in_days' => 25],
+                ],
             ],
         ];
     }
