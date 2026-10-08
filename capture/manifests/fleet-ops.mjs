@@ -105,9 +105,13 @@ const hideServiceAreas = async (page) => {
 const openServiceAreaMenu = async (page, areaName) => {
     await showServiceAreas(page);
     await page.locator(SERVICE_AREAS_BUTTON).first().click();
-    await page.locator('.next-dd-item', { hasText: areaName }).first().click();
-    await page.getByText(`Edit Boundaries: ${areaName}`).first().waitFor({ state: 'visible' });
+    await page.locator('.ember-basic-dropdown-content .next-dd-item', { hasText: areaName }).first().click();
+    await areaAction(page, `Edit Boundaries: ${areaName}`).waitFor({ state: 'visible' });
 };
+// An action in the toolbar submenu. Scoped to the dropdown: the live map's right-click menu
+// carries hidden items with the same text, and an unscoped getByText().first() resolved to one
+// of those in a v0.7.68 run (click timed out on an invisible element).
+const areaAction = (page, text) => page.locator('.ember-basic-dropdown-content .next-dd-item', { hasText: text }).first();
 
 export default {
     area: 'fleet-ops',
@@ -289,7 +293,7 @@ export default {
             waitFor: '.leaflet-container',
             interact: async (page) => {
                 await openServiceAreaMenu(page, 'Singapore Central');
-                await page.getByText('Edit Boundaries: Singapore Central').first().click();
+                await areaAction(page, 'Edit Boundaries: Singapore Central').click();
             },
             waitForAfterInteract: '.leaflet-editing-icon',
             map: { settleTiles: true },
