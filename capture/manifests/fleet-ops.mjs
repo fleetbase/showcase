@@ -81,30 +81,39 @@ const rateDetails = (id, file, name) => ({
 // The live map draws no service areas until "Show all Service Areas" is picked from the
 // toolbar panel; the first run of these entries showed menus and a feed over a bare map.
 const SERVICE_AREAS_BUTTON = '#map-toolbar-service-areas-button .ember-basic-dropdown-trigger, #map-toolbar-service-areas-button [role="button"]';
+// Open the Service Areas toolbar panel, retrying: in one v0.7.68 run the click landed while the
+// map was still settling and the panel never opened (its items were absent from the DOM).
+const openServiceAreasPanel = async (page) => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        await page.locator(SERVICE_AREAS_BUTTON).first().click();
+        try {
+            await areaAction(page, 'Show all Service Areas').waitFor({ state: 'visible', timeout: 4000 });
+            return;
+        } catch {
+            await page.keyboard.press('Escape');
+        }
+    }
+    throw new Error('the Service Areas toolbar panel did not open');
+};
 const showServiceAreas = async (page) => {
     // The polygons are registered hidden as they load; "show all" only reveals layers that
     // already exist, so clicking before they arrive is a silent no-op (it was, in the second
-    // run). Wait for all seven — three areas, four zones — then for one to be visible.
+    // run). Wait for all seven — three areas, four zones — then for one to be visible. They are
+    // registered hidden again on every page load, so nothing needs hiding afterwards.
     await page.waitForFunction(() => document.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive').length >= 7, null, { timeout: 30000 });
-    await page.locator(SERVICE_AREAS_BUTTON).first().click();
-    await page.getByText('Show all Service Areas').first().click();
+    await openServiceAreasPanel(page);
+    await areaAction(page, 'Show all Service Areas').click();
     await page.waitForFunction(
         () => [...document.querySelectorAll('.leaflet-overlay-pane path.leaflet-interactive')].some((p) => p.style.display !== 'none'),
         null,
         { timeout: 15000 }
     );
 };
-// Visibility may persist; hide them again so other live-map screens are unaffected.
-const hideServiceAreas = async (page) => {
-    await page.keyboard.press('Escape');
-    await page.locator(SERVICE_AREAS_BUTTON).first().click();
-    await page.getByText('Hide all Service Areas').first().click();
-};
 
 // The live map's Service Areas toolbar panel, with one area's action submenu open.
 const openServiceAreaMenu = async (page, areaName) => {
     await showServiceAreas(page);
-    await page.locator(SERVICE_AREAS_BUTTON).first().click();
+    await openServiceAreasPanel(page);
     await page.locator('.ember-basic-dropdown-content .next-dd-item', { hasText: areaName }).first().click();
     await areaAction(page, `Edit Boundaries: ${areaName}`).waitFor({ state: 'visible' });
 };
@@ -283,7 +292,6 @@ export default {
             interact: (page) => openServiceAreaMenu(page, 'Singapore Central'),
             map: { settleTiles: true },
             extraSettleMs: 1500,
-            cleanup: hideServiceAreas,
         },
         {
             // ...and the same area in edit-boundaries mode: dashed outline, draggable handles.
@@ -298,7 +306,6 @@ export default {
             waitForAfterInteract: '.leaflet-editing-icon',
             map: { settleTiles: true },
             extraSettleMs: 1500,
-            cleanup: hideServiceAreas,
         },
         {
             // README and platform pages: service areas and zones on the live map, with the
@@ -320,7 +327,6 @@ export default {
             // other live-map screens are unaffected.
             cleanup: async (page) => {
                 await page.locator('.notch').first().dblclick();
-                await hideServiceAreas(page);
             },
         },
         {
@@ -572,10 +578,9 @@ export default {
             waitFor: '.leaflet-container',
             interact: async (page) => {
                 await showServiceAreas(page);
-                await page.locator(SERVICE_AREAS_BUTTON).first().click();
+                await openServiceAreasPanel(page);
             },
             waitForAfterInteract: '.ember-basic-dropdown-content',
-            cleanup: hideServiceAreas,
             map: { settleTiles: true },
             extraSettleMs: 2000,
         },
