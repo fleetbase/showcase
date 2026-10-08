@@ -296,7 +296,11 @@ trait SeedsStorefrontFixtures
     | moves it onto capture time once the scheduler is stopped (scripts/capture.sh).
     */
 
-    /** The capture's "today". Unlike timestamp(), not clamped: promotions can start later. */
+    /**
+     * The capture's "today". Unlike timestamp(), not clamped: promotions can start later.
+     * Dates built from it are converted to UTC before saving: Eloquent writes a Carbon's wall
+     * time as-is and the app reads it back as UTC, so a Singapore midnight came out as 8:00 AM.
+     */
     protected function marketingNow(): Carbon
     {
         return Carbon::parse('2026-01-20 12:00:00', $this->seedTimezone());
@@ -392,8 +396,8 @@ trait SeedsStorefrontFixtures
             'stackable'                => $promotion['stackable'] ?? false,
             'priority'                 => $promotion['priority'] ?? 0,
             'is_public'                => $promotion['is_public'] ?? true,
-            'starts_at'                => isset($promotion['starts_in_days']) ? $this->marketingNow()->addDays($promotion['starts_in_days'])->startOfDay() : null,
-            'ends_at'                  => isset($promotion['ends_in_days']) ? $this->marketingNow()->addDays($promotion['ends_in_days'])->endOfDay() : null,
+            'starts_at'                => isset($promotion['starts_in_days']) ? $this->marketingNow()->addDays($promotion['starts_in_days'])->startOfDay()->utc() : null,
+            'ends_at'                  => isset($promotion['ends_in_days']) ? $this->marketingNow()->addDays($promotion['ends_in_days'])->endOfDay()->utc() : null,
             'schedule'                 => $promotion['schedule'] ?? null,
             'timezone'                 => $promotion['timezone'] ?? $owner->timezone ?? $this->seedTimezone(),
             'meta'                     => $this->meta('promotion:' . $ownerKey . ':' . $key),
@@ -431,7 +435,7 @@ trait SeedsStorefrontFixtures
             };
             $action = array_filter(['type' => $action['type'], 'id' => $target?->public_id, 'url' => $action['url'] ?? null]);
         }
-        $sentAt = $status === Campaign::STATUS_SENT ? $this->marketingNow()->subDays($campaign['sent_days_ago'] ?? 1)->setTime(10, 0) : null;
+        $sentAt = $status === Campaign::STATUS_SENT ? $this->marketingNow()->subDays($campaign['sent_days_ago'] ?? 1)->setTime(10, 0)->utc() : null;
         $sendAt = $status === Campaign::STATUS_SCHEDULED ? now()->addYear()->setTime(10, 0) : $sentAt;
 
         return $this->createRecord(Campaign::class, [

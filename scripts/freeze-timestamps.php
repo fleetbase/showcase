@@ -105,7 +105,7 @@ try {
         foreach (\Fleetbase\Storefront\Models\Campaign::where('company_uuid', $company->uuid)->where('status', 'scheduled')->get() as $campaign) {
             $days = (int) data_get($campaign->meta, 'send_in_days', 0);
             if ($days > 0) {
-                $campaigns += \Fleetbase\Storefront\Models\Campaign::where('uuid', $campaign->uuid)->update(['send_at' => $captureDay->copy()->addDays($days)]);
+                $campaigns += \Fleetbase\Storefront\Models\Campaign::where('uuid', $campaign->uuid)->update(['send_at' => $captureDay->copy()->addDays($days)->utc()->format('Y-m-d H:i:s')]);
             }
         }
     }
