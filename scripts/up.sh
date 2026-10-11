@@ -46,6 +46,11 @@ WSS_PORT="$(carry WSS_PORT 38000)"
 # Optional; enables the Google Maps capture pass (scripts/capture.sh). Carried like the ports
 # so a key given once survives the next up.sh.
 GOOGLE_MAPS_API_KEY="$(carry GOOGLE_MAPS_API_KEY "")"
+# The mobile capture only (scripts/mobile/): the public origin the app reaches the stack on,
+# and the Storefront sign-in bypass for the seeded review customer. Empty for console runs.
+APP_URL="$(carry APP_URL "")"
+STOREFRONT_BYPASS_VERIFICATION_CODE="$(carry STOREFRONT_BYPASS_VERIFICATION_CODE "")"
+STOREFRONT_REVIEW_ACCOUNTS="$(carry STOREFRONT_REVIEW_ACCOUNTS "")"
 
 cat > .env <<ENV
 # Written by scripts/up.sh — not committed.
@@ -54,6 +59,9 @@ APP_KEY=${APP_KEY}
 HTTP_PORT=${HTTP_PORT}
 WSS_PORT=${WSS_PORT}
 GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+APP_URL=${APP_URL}
+STOREFRONT_BYPASS_VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE}
+STOREFRONT_REVIEW_ACCOUNTS=${STOREFRONT_REVIEW_ACCOUNTS}
 ENV
 
 if [[ "$HTTP_PORT" != "80" ]]; then

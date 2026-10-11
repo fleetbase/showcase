@@ -20,6 +20,8 @@ that brings the existing files onto this scheme.
 | `-google` | The Google Maps variant of a live-map screen; Leaflet is unsuffixed |
 | `-light` | The light-theme variant; dark is unsuffixed, matching the published library |
 
+Mobile app screenshots add one folder level for the platform, `storefront-app/ios/` and `storefront-app/android/`, and otherwise follow the same rule: `storefront-app-product-details.webp`, `storefront-app-store-details-network-light.webp`.
+
 ### The view vocabulary
 
 | Word | The screen it names | Replaces |
