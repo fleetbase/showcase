@@ -26,7 +26,9 @@ x-api-env: &api-env
   APP_DEBUG: "false"
   APP_KEY: ${APP_KEY:?run scripts/up.sh, which generates one}
   # Must match the origin the proxy serves. Storage URLs and mail links are built from it.
-  APP_URL: http://localhost
+  # The mobile capture serves the stack through a public tunnel, so the app on a simulator
+  # can load product images; it sets this to the tunnel's URL (scripts/mobile/tunnel.sh).
+  APP_URL: ${APP_URL:-http://localhost}
   CONSOLE_HOST: http://localhost
   DATABASE_URL: mysql://root@database/fleetbase
   QUEUE_CONNECTION: redis
@@ -57,6 +59,11 @@ x-api-env: &api-env
   # never sees the key in config — it asks the API (fleet-ops/settings/map), which reads it
   # from this variable. Empty means the Google capture pass is skipped. See README.
   GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+  # Storefront app sign-in for the mobile capture: the code is accepted ONLY for the numbers
+  # in STOREFRONT_REVIEW_ACCOUNTS (the seeded review customer). Both empty by default, which
+  # disables the bypass.
+  STOREFRONT_BYPASS_VERIFICATION_CODE: ${STOREFRONT_BYPASS_VERIFICATION_CODE:-}
+  STOREFRONT_REVIEW_ACCOUNTS: ${STOREFRONT_REVIEW_ACCOUNTS:-}
 
 services:
   # ── The single origin ────────────────────────────────────────────────────────────────

@@ -115,6 +115,8 @@ instead of the dashboard. `storefront-products-overview` is in the monorepo READ
 
 ## X — outside console capture, or blocked
 
+The stock Storefront app is now captured on iOS and Android by `storefront-app-screenshots.yml` (see README), into `storefront-app/ios/` and `storefront-app/android/`. The `storefront-app/true-vegan/` and `storefront-app/oli-max/` images below are of client builds and stay hand-made; the Navigator app has no pipeline yet.
+
 | Image | Uses | What it needs |
 |---|---:|---|
 | `storefront-app/true-vegan/true-vegan-home-screen.webp` | 3 | Mobile app (React Native) — a separate simulator pipeline, not console capture. |

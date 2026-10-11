@@ -135,6 +135,29 @@ wants anyway.
 | Storefront | ⬜ | ⬜ |
 | Ledger | ⬜ | ⬜ |
 
+## Storefront app (iOS and Android)
+
+`.github/workflows/storefront-app-screenshots.yml` captures the Storefront mobile app on the iOS Simulator (iPhone 16 Pro Max, 1320×2868) and the Android Emulator (Pixel 7 Pro), against the same seeded release stack, and proposes the changed images under `public/images/screenshots/storefront-app/{ios,android}/` on fleetbase.io.
+
+- **The flows live in the app**, in [`storefront-app/.maestro/screenshots`](https://github.com/fleetbase/storefront-app/tree/main/.maestro/screenshots), so a screen and the flow that walks through it change in the same pull request. This repo provides the stack, the build settings and the publishing.
+- **Trigger:** storefront-app's release workflow sends `repository_dispatch` `storefront-app-release` with the tag; or run it by hand with `app_ref`, `release_tag`, `platforms` and `open_pr`. Release runs open the pull request when `OPEN_PR_ON_RELEASE` is `true`, as for the console.
+- **How the devices reach the stack:** iOS only runs on macOS, macOS runners can't run the Docker stack, and iOS only allows HTTPS to unknown hosts. So the stack job opens a `cloudflared` quick tunnel (`scripts/mobile/tunnel.sh`) and starts the stack with it as `APP_URL`, so image URLs resolve too. Android runs on an emulator in the same job; iOS runs in a parallel macOS job. The two hand over through artifacts (`mobile-stack`, `ios-done`), because job outputs only arrive once a job has finished.
+- **What the app is built with:** `scripts/mobile/fixtures.sh` reads the seeded store and network keys, the SDK key, the store and food-truck coordinates and the review customer from the database (`scripts/mobile-fixtures.php`), and `scripts/mobile/app-env.sh` writes the app's `.env` per edition: store, network and food trucks (`HOME_SCREEN=foodTrucks`). Each edition is its own Release build, because the values are compiled in.
+- **Signing in:** the real flow, with Storefront's review-account bypass. Each run generates a code, starts the stack with `STOREFRONT_BYPASS_VERIFICATION_CODE` and `STOREFRONT_REVIEW_ACCOUNTS=+6591000201` (the seeded customer Ava Chen, who has order history and an order in progress), and passes both to the flow.
+- **Determinism:** fixed devices and locale, status bar overrides on both platforms (9:41, full battery), animations off on Android, seeded timestamps. Map tiles still vary slightly; the pixel gate absorbs that. There is no DOM on a phone, so the compare is pixels-only.
+- **Output:** `capture/out/storefront-app/<platform>/*.png`, encoded to lossless WebP by `capture/bin/encode-mobile.mjs` (the existing app screenshots are lossless). Dark is unsuffixed, light is `-light`, names follow [NAMING.md](NAMING.md).
+
+Optional secrets: `GOOGLE_MAPS_API_KEY` (Android map tiles) and `STOREFRONT_STRIPE_TEST_KEY` (a Stripe `pk_test_` key for the checkout screen).
+
+Locally, with a booted simulator and `maestro` installed:
+
+```bash
+URL="$(./scripts/mobile/tunnel.sh)"
+APP_URL="$URL" STOREFRONT_BYPASS_VERIFICATION_CODE=123456 STOREFRONT_REVIEW_ACCOUNTS=+6591000201 ./scripts/up.sh
+./scripts/provision.sh && SHOWCASE_PASSWORD='…' ./scripts/seed.sh && ./scripts/mobile/fixtures.sh
+SIMULATOR_ID=<udid> STOREFRONT_BYPASS_VERIFICATION_CODE=123456 ./scripts/mobile/capture.sh ios ../storefront-app "$URL" store
+```
+
 ## Google Maps variants
 
 The console can render its *live operations map* with Google Maps instead of Leaflet

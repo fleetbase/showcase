@@ -1,0 +1,527 @@
+# Storefront app screenshots: the iOS Simulator and the Android Emulator, against the same
+# seeded release stack the console screenshots use, driven by the app's own Maestro flows
+# (storefront-app/.maestro/screenshots). Proposes the changed images to fleetbase.io under
+# public/images/screenshots/storefront-app/{ios,android}/.
+#
+# Three jobs run side by side:
+#
+#   stack    ubuntu  boots and seeds the stack behind a public HTTPS tunnel, captures Android
+#                    on an emulator here (KVM), then stays up until iOS is done
+#   ios      macOS   builds the app against the tunnel and captures on the simulator
+#   publish  ubuntu  encodes, compares against fleetbase.io, opens the pull request
+#
+# Why a tunnel: iOS simulators only run on macOS, GitHub's macOS runners cannot run the Docker
+# stack, and iOS App Transport Security only allows HTTPS to unknown hosts. The tunnel URL is
+# also the stack's APP_URL, so product image URLs resolve on the devices.
+#
+# Why the jobs talk through artifacts: a job's outputs only reach other jobs once it has
+# finished, and the stack has to stay up while iOS runs. The stack uploads `mobile-stack`
+# (URL, keys, sign-in code) as soon as it is ready; iOS waits for it, and uploads `ios-done`
+# when it is finished so the stack can shut down. Everything in it belongs to a stack that no
+# longer exists when the run ends.
+name: Storefront app screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: 'storefront-app ref (tag or branch) whose build and flows to capture'
+        required: false
+        default: 'main'
+      release_tag:
+        description: 'Fleetbase release for the API (vX.Y.Z or "latest")'
+        required: false
+        default: 'latest'
+      platforms:
+        description: 'Space-separated: ios android'
+        required: false
+        default: 'ios android'
+      open_pr:
+        description: 'Open a pull request on fleetbase.io with the changed screenshots'
+        type: boolean
+        required: false
+        default: false
+  # Sent by storefront-app's create-release workflow on every v* tag.
+  repository_dispatch:
+    types: [storefront-app-release]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: storefront-app-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The seeded review customer (StoreSeeder's first customer, Ava Chen), as the app submits it.
+  REVIEW_PHONE: '+6591000201'
+  APP_REPO: fleetbase/storefront-app
+
+jobs:
+  config:
+    name: Resolve inputs
+    runs-on: ubuntu-latest
+    outputs:
+      app_ref: ${{ steps.cfg.outputs.app_ref }}
+      tag: ${{ steps.cfg.outputs.tag }}
+      ios: ${{ steps.cfg.outputs.ios }}
+      android: ${{ steps.cfg.outputs.android }}
+      open_pr: ${{ steps.cfg.outputs.open_pr }}
+    steps:
+      - id: cfg
+        env:
+          DISPATCH_APP_TAG: ${{ github.event.client_payload.tag }}
+          INPUT_APP_REF: ${{ inputs.app_ref }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+          INPUT_PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          APP_REF="${INPUT_APP_REF:-${DISPATCH_APP_TAG:-main}}"
+          TAG="${INPUT_TAG:-latest}"
+          PLATFORMS="${INPUT_PLATFORMS:-ios android}"
+
+          # Same rule as the console run: "latest" becomes the newest vX.Y.Z published for
+          # both images, so the artifact and pull request name a real version.
+          if [[ "$TAG" == "latest" ]]; then
+            TAG="$(python3 - <<'PY'
+          import json, re, sys, urllib.request
+          def tags(repo):
+              out, url = set(), f"https://hub.docker.com/v2/repositories/fleetbase/{repo}/tags/?page_size=100"
+              while url:
+                  with urllib.request.urlopen(url, timeout=30) as r:
+                      page = json.load(r)
+                  out |= {t["name"] for t in page["results"] if re.fullmatch(r"v\d+\.\d+\.\d+", t["name"])}
+                  url = page.get("next")
+              return out
+          both = tags("fleetbase-console") & tags("fleetbase-api")
+          if not both:
+              sys.exit("no vX.Y.Z tag is published for both fleetbase-console and fleetbase-api")
+          print(max(both, key=lambda t: tuple(int(n) for n in t[1:].split("."))))
+          PY
+          )"
+          fi
+
+          OPEN_PR=false
+          [[ "${{ inputs.open_pr }}" == "true" ]] && OPEN_PR=true
+          if [[ "${{ github.event_name }}" == "repository_dispatch" && "${{ vars.OPEN_PR_ON_RELEASE }}" == "true" ]]; then
+            OPEN_PR=true
+          fi
+
+          {
+            echo "app_ref=$APP_REF"
+            echo "tag=$TAG"
+            echo "ios=$([[ " $PLATFORMS " == *" ios "* ]] && echo true || echo false)"
+            echo "android=$([[ " $PLATFORMS " == *" android "* ]] && echo true || echo false)"
+            echo "open_pr=$OPEN_PR"
+          } >> "$GITHUB_OUTPUT"
+          echo "storefront-app $APP_REF against Fleetbase $TAG ($PLATFORMS, open_pr=$OPEN_PR)"
+
+  stack:
+    name: Stack + Android
+    needs: config
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require SHOWCASE_PASSWORD
+        run: |
+          if [[ -z "${{ secrets.SHOWCASE_PASSWORD }}" ]]; then
+            echo "::error::SHOWCASE_PASSWORD is not set."
+            exit 1
+          fi
+
+      # The stack, two Gradle builds and an emulator image do not fit next to the runner's
+      # preinstalled toolchains.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules/@angular "$AGENT_TOOLSDIRECTORY/CodeQL" || true
+          df -h /
+
+      - name: Install cloudflared
+        run: |
+          curl -fsSL -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+      # Before the stack: its URL becomes APP_URL, which storage (image) URLs are built from.
+      - name: Open the tunnel
+        id: tunnel
+        run: echo "url=$(./scripts/mobile/tunnel.sh)" >> "$GITHUB_OUTPUT"
+
+      # A fresh sign-in code per run. The server accepts it only for REVIEW_PHONE, and the
+      # stack it unlocks is gone when the run ends.
+      - name: Generate the sign-in code
+        id: code
+        run: echo "value=$(python3 -c 'import secrets; print(f"{secrets.randbelow(10**6):06d}")')" >> "$GITHUB_OUTPUT"
+
+      - name: Start the stack
+        env:
+          RELEASE_TAG: ${{ needs.config.outputs.tag }}
+          APP_URL: ${{ steps.tunnel.outputs.url }}
+          STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.code.outputs.value }}
+          STOREFRONT_REVIEW_ACCOUNTS: ${{ env.REVIEW_PHONE }}
+        run: ./scripts/up.sh
+
+      - name: Provision
+        run: ./scripts/provision.sh
+
+      - name: Seed fixtures
+        env:
+          SHOWCASE_PASSWORD: ${{ secrets.SHOWCASE_PASSWORD }}
+        run: ./scripts/seed.sh
+
+      - name: Read mobile fixtures
+        run: ./scripts/mobile/fixtures.sh
+
+      - name: Check the stack through the tunnel
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${{ steps.tunnel.outputs.url }}/health" >/dev/null
+          echo "Stack reachable at ${{ steps.tunnel.outputs.url }}"
+
+      - name: Share the stack with the iOS job
+        run: |
+          python3 - <<'PY'
+          import json
+          fixtures = json.load(open('.mobile-fixtures.json'))
+          json.dump({
+              'url': '${{ steps.tunnel.outputs.url }}',
+              'code': '${{ steps.code.outputs.value }}',
+              'fixtures': fixtures,
+          }, open('mobile-stack.json', 'w'))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-stack
+          path: |
+            mobile-stack.json
+            .mobile-fixtures.json
+          retention-days: 1
+
+      # ── Android ──────────────────────────────────────────────────────────────────────────
+      - name: Checkout storefront-app
+        if: needs.config.outputs.android == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: ${{ needs.config.outputs.app_ref }}
+          path: app
+
+      - uses: actions/setup-node@v4
+        if: needs.config.outputs.android == 'true'
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        if: needs.config.outputs.android == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install app dependencies
+        if: needs.config.outputs.android == 'true'
+        working-directory: app
+        run: |
+          corepack enable
+          yarn install --immutable || yarn install
+
+      - name: Install Maestro
+        if: needs.config.outputs.android == 'true'
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        if: needs.config.outputs.android == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Capture Android
+        if: needs.config.outputs.android == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.code.outputs.value }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          STRIPE_KEY: ${{ secrets.STOREFRONT_STRIPE_TEST_KEY }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          # Demo mode: a fixed clock, full battery and signal in every status bar.
+          script: |
+            adb shell settings put global sysui_demo_allowed 1
+            adb shell am broadcast -a com.android.systemui.demo -e command enter
+            adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941
+            adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
+            adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
+            adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
+            ./scripts/mobile/capture.sh android app "${{ steps.tunnel.outputs.url }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && needs.config.outputs.android == 'true'
+        with:
+          name: storefront-app-android
+          path: capture/out/storefront-app/android
+          if-no-files-found: warn
+          retention-days: 14
+
+      # ── Keep serving until iOS is done ───────────────────────────────────────────────────
+      - name: Wait for the iOS job
+        if: needs.config.outputs.ios == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 120 * 60 ))
+          until gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[].name' | grep -qx 'ios-done'; do
+            if (( $(date +%s) > deadline )); then
+              echo "::warning::Gave up waiting for the iOS job after 120 minutes."
+              break
+            fi
+            sleep 20
+          done
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --no-color --tail=200 || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          [[ -f .tunnel.pid ]] && kill "$(cat .tunnel.pid)" 2>/dev/null || true
+          docker compose down -v || true
+
+  ios:
+    name: iOS
+    needs: config
+    if: needs.config.outputs.ios == 'true'
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout storefront-app
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: ${{ needs.config.outputs.app_ref }}
+          path: app
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install app dependencies
+        working-directory: app
+        run: |
+          corepack enable
+          yarn install --immutable || yarn install
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('app/ios/Podfile.lock') }}
+          restore-keys: pods-${{ runner.os }}-
+
+      - name: Install pods
+        working-directory: app
+        run: |
+          if [[ -x scripts/ci/install-cocoapods.sh ]]; then
+            ./scripts/ci/install-cocoapods.sh
+          else
+            (cd ios && pod install)
+          fi
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # iPhone 16 Pro Max renders 1320×2868, the size of the existing app screenshots on
+      # fleetbase.io.
+      - name: Boot the simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          UDID="$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = [d for runtime in json.load(sys.stdin)['devices'].values() for d in runtime]
+          match = next((d for d in devices if d['name'] == 'iPhone 16 Pro Max'), None)
+          print(match['udid'] if match else '')
+          ")"
+          if [[ -z "$UDID" ]]; then
+            RUNTIME="$(xcrun simctl list runtimes -j | python3 -c "import json,sys; r=[x for x in json.load(sys.stdin)['runtimes'] if x['platform']=='iOS' and x['isAvailable']]; print(r[-1]['identifier'])")"
+            UDID="$(xcrun simctl create 'iPhone 16 Pro Max' com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max "$RUNTIME")"
+          fi
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 --dataNetwork wifi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      # Built while the stack is still seeding: the first build is the slow one, and the
+      # flows only need the stack once the app exists. The tunnel URL is not known yet, so this
+      # warms the build cache only; capture.sh rebuilds with the real .env (incrementally).
+      - name: Warm the Release build
+        working-directory: app/ios
+        continue-on-error: true
+        run: |
+          xcodebuild -workspace StorefrontApp.xcworkspace -scheme StorefrontApp \
+            -configuration Release -sdk iphonesimulator \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 5
+
+      - name: Wait for the stack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 90 * 60 ))
+          until gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[].name' | grep -qx 'mobile-stack'; do
+            if (( $(date +%s) > deadline )); then
+              echo "::error::The stack job did not become ready within 90 minutes."
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-stack
+          path: .
+
+      - name: Read the stack
+        id: stack
+        run: |
+          set -euo pipefail
+          URL="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['url'])")"
+          CODE="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['code'])")"
+          echo "::add-mask::$CODE"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Capture iOS
+        env:
+          SIMULATOR_ID: ${{ steps.sim.outputs.udid }}
+          STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
+          STRIPE_KEY: ${{ secrets.STOREFRONT_STRIPE_TEST_KEY }}
+        run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storefront-app-ios
+          path: capture/out/storefront-app/ios
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Tells the stack job it can shut down. Uploaded whatever happened above.
+      - name: Signal done
+        if: always()
+        run: echo done > ios-done.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-done
+          path: ios-done.txt
+          retention-days: 1
+
+  publish:
+    name: Publish
+    needs: [config, stack, ios]
+    if: always() && needs.config.outputs.open_pr == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install capture dependencies
+        working-directory: capture
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: storefront-app-*
+          path: capture/out/raw
+
+      - name: Checkout fleetbase.io
+        uses: actions/checkout@v4
+        with:
+          repository: fleetbase/fleetbase.io
+          token: ${{ secrets.FLEETBASE_IO_TOKEN }}
+          path: fleetbase-io
+
+      - name: Encode and compare
+        id: compare
+        run: |
+          set -euo pipefail
+          for platform in ios android; do
+            src="capture/out/raw/storefront-app-$platform"
+            [[ -d "$src" ]] || { echo "No $platform screenshots in this run."; continue; }
+            echo "::group::$platform"
+            node capture/bin/encode-mobile.mjs --new "$src" --out "capture/out/storefront-app-$platform" --area "storefront-app/$platform"
+            # No DOM hash on a phone: an empty baseline makes the gate pixels-only.
+            node capture/bin/compare.mjs \
+              --new "capture/out/storefront-app-$platform" \
+              --current "fleetbase-io/public/images/screenshots/storefront-app/$platform" \
+              --staged "fleetbase-io/public/images/screenshots/storefront-app/$platform" \
+              --report "capture/out/storefront-app-$platform/report.json" \
+              --hash-baseline "capture/out/storefront-app-$platform/.baseline.json"
+            echo "::endgroup::"
+          done
+          cd fleetbase-io
+          echo "changed=$(git status --porcelain public/images/screenshots/storefront-app | wc -l | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Collect flow failures
+        id: failures
+        run: |
+          {
+            echo 'list<<FLOW_FAILURES_EOF'
+            for platform in ios android; do
+              f="capture/out/raw/storefront-app-$platform/failures.txt"
+              [[ -s "$f" ]] && sed "s/^/- $platform: /" "$f"
+            done
+            echo FLOW_FAILURES_EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.compare.outputs.changed != '0'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          path: fleetbase-io
+          token: ${{ secrets.FLEETBASE_IO_TOKEN }}
+          base: main
+          branch: automation/storefront-app-screenshots/${{ needs.config.outputs.app_ref }}
+          delete-branch: true
+          add-paths: public/images/screenshots/storefront-app/**
+          commit-message: 'Refresh Storefront app screenshots for ${{ needs.config.outputs.app_ref }}'
+          title: 'Refresh Storefront app screenshots for ${{ needs.config.outputs.app_ref }}'
+          labels: automated
+          body: |
+            iOS Simulator (iPhone 16 Pro Max) and Android Emulator (Pixel 7 Pro) screenshots of
+            storefront-app `${{ needs.config.outputs.app_ref }}` against Fleetbase
+            `${{ needs.config.outputs.tag }}`, captured by
+            [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            Files without a suffix are dark; `-light.webp` files are the light appearance.
+            The hand-made `true-vegan/` and `oli-max/` folders are not touched.
+
+            ${{ steps.failures.outputs.list != '' && '**Not in this pull request.** These flows failed:' || '' }}
+            ${{ steps.failures.outputs.list }}
