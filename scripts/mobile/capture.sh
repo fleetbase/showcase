@@ -82,13 +82,13 @@ build_and_install() {
             # installable on an emulator. One ABI (the emulator's) keeps the native build short.
             if [[ "$PHASE" != run ]]; then
                 android_firebase_placeholder
-                (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease -PreactNativeArchitectures=x86_64)
+                (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease -PreactNativeArchitectures=x86_64) || return 1
                 mkdir -p "$APKS"
-                cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$APKS/${EDITION}.apk"
+                cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$APKS/${EDITION}.apk" || return 1
             fi
             if [[ "$PHASE" != build ]]; then
                 adb uninstall "$APP_ID" >/dev/null 2>&1 || true
-                adb install -r "$APKS/${EDITION}.apk"
+                adb install -r "$APKS/${EDITION}.apk" || return 1
             fi
             ;;
     esac

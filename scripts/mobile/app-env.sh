@@ -35,6 +35,11 @@ env = {
     'DEFAULT_LOCALE': 'en',
     'AVAILABLE_LOCALES': 'en',
     'PAYMENT_GATEWAY': 'stripe',
+    # The Android manifest references these as string resources, so the build fails without
+    # them. Facebook sign-in plays no part in the screenshots.
+    'FACEBOOK_APP_ID': '000000000000000',
+    'FACEBOOK_CLIENT_TOKEN': 'screenshots',
+    'GOOGLE_MAPS_API_KEY': 'screenshots',
 }
 if edition.endswith('food-trucks'):
     env['HOME_SCREEN'] = 'foodTrucks'
