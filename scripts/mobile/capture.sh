@@ -4,7 +4,8 @@
 #
 #   ./scripts/mobile/capture.sh <ios|android> <app dir> <https://… stack URL> [editions…]
 #
-# Output: capture/out/storefront-app/<platform>/<shot>[-light].png. Dark is the default theme
+# Output: capture/out/storefront-app/<platform>/<shot>[-light].png, and Maestro's debug output
+# (screenshots and view hierarchy at each failure) in debug/<edition>-<theme>/. Dark is the default theme
 # and carries no suffix, matching the console naming rule (NAMING.md).
 #
 # Requires: a booted device, maestro on PATH, .mobile-fixtures.json (fixtures.sh), and for the
@@ -83,8 +84,13 @@ for EDITION in "${EDITIONS[@]}"; do
         SUFFIX=""
         [[ "$THEME" == light ]] && SUFFIX="-light"
         SHOTS="$(mktemp -d)"
-        # takeScreenshot writes to the working directory.
-        if ! (cd "$SHOTS" && maestro test "$APP_DIR/.maestro/screenshots/${EDITION}.yaml" \
+        DEBUG="${OUT}/debug/${EDITION}-${THEME}"
+        mkdir -p "$DEBUG"
+        touch "$SHOTS/.start"
+        # Where takeScreenshot writes has moved between Maestro versions (the working directory,
+        # the test output directory), so run in SHOTS with SHOTS as the output directory and
+        # collect by name from anywhere it may have landed.
+        if ! (cd "$SHOTS" && maestro test --test-output-dir "$DEBUG" "$APP_DIR/.maestro/screenshots/${EDITION}.yaml" \
             -e "APP_ID=${APP_ID}" \
             -e "SHOT_SUFFIX=${SUFFIX}" \
             -e "LATITUDE=${LAT:-1.2834}" \
@@ -93,12 +99,12 @@ for EDITION in "${EDITIONS[@]}"; do
             -e "VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE:-}"); then
             echo "${EDITION} (${THEME}): flow failed; partial screenshots kept" >>"$FAILURES"
         fi
-        find "$SHOTS" -maxdepth 1 -name '*.png' -exec mv {} "$OUT/" \;
+        find "$SHOTS" "$DEBUG" "$APP_DIR/.maestro" "$HOME/.maestro/tests" -name 'storefront-app-*.png' -newer "$SHOTS/.start" -exec mv {} "$OUT/" \; 2>/dev/null || true
         rm -rf "$SHOTS"
     done
 done
 
-COUNT="$(find "$OUT" -maxdepth 1 -name '*.png' | wc -l | tr -d ' ')"
+COUNT="$(find "$OUT" -maxdepth 1 -name 'storefront-app-*.png' | wc -l | tr -d ' ')"
 echo "==> ${PLATFORM}: ${COUNT} screenshots in ${OUT#"$ROOT"/}"
 if [[ -s "$FAILURES" ]]; then
     echo "::warning::Some ${PLATFORM} flows failed:"
