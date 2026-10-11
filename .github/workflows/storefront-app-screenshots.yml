@@ -5,19 +5,23 @@
 #
 # Three jobs run side by side:
 #
-#   stack    ubuntu  boots and seeds the stack behind a public HTTPS tunnel, captures Android
-#                    on an emulator here (KVM), then stays up until iOS is done
+#   stack    ubuntu  boots and seeds the stack behind a public HTTPS tunnel, then stays up
+#                    until both captures are done
+#   android  ubuntu  builds the app against the tunnel and captures on an emulator (KVM)
 #   ios      macOS   builds the app against the tunnel and captures on the simulator
 #   publish  ubuntu  encodes, compares against fleetbase.io, opens the pull request
+#
+# Android has its own runner: next to the stack (MySQL, three API containers), Gradle and the
+# emulator starved a 4-core runner until it lost contact with GitHub.
 #
 # Why a tunnel: iOS simulators only run on macOS, GitHub's macOS runners cannot run the Docker
 # stack, and iOS App Transport Security only allows HTTPS to unknown hosts. The tunnel URL is
 # also the stack's APP_URL, so product image URLs resolve on the devices.
 #
 # Why the jobs talk through artifacts: a job's outputs only reach other jobs once it has
-# finished, and the stack has to stay up while iOS runs. The stack uploads `mobile-stack`
-# (URL, keys, sign-in code) as soon as it is ready; iOS waits for it, and uploads `ios-done`
-# when it is finished so the stack can shut down. Everything in it belongs to a stack that no
+# finished, and the stack has to stay up while the captures run. The stack uploads
+# `mobile-stack` (URL, keys, sign-in code) as soon as it is ready; each capture job waits for it,
+# and uploads `<platform>-done` when it is finished so the stack can shut down. Everything in it belongs to a stack that no
 # longer exists when the run ends.
 name: Storefront app screenshots
 
@@ -118,7 +122,7 @@ jobs:
           echo "storefront-app $APP_REF against Fleetbase $TAG ($PLATFORMS, open_pr=$OPEN_PR)"
 
   stack:
-    name: Stack + Android
+    name: Stack
     needs: config
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -132,8 +136,6 @@ jobs:
             exit 1
           fi
 
-      # The stack, two Gradle builds and an emulator image do not fit next to the runner's
-      # preinstalled toolchains.
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules/@angular "$AGENT_TOOLSDIRECTORY/CodeQL" || true
@@ -195,14 +197,52 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: mobile-stack
-          path: |
-            mobile-stack.json
-            .mobile-fixtures.json
+          path: mobile-stack.json
           retention-days: 1
 
-      # ── Android ──────────────────────────────────────────────────────────────────────────
+      # ── Keep serving until the captures are done ─────────────────────────────────────────
+      - name: Wait for the capture jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wanted=()
+          [[ "${{ needs.config.outputs.ios }}" == "true" ]] && wanted+=(ios-done)
+          [[ "${{ needs.config.outputs.android }}" == "true" ]] && wanted+=(android-done)
+          deadline=$(( $(date +%s) + 150 * 60 ))
+          for marker in "${wanted[@]}"; do
+            until gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[].name' | grep -qx "$marker"; do
+              if (( $(date +%s) > deadline )); then
+                echo "::warning::Gave up waiting for ${marker} after 150 minutes."
+                break 2
+              fi
+              sleep 20
+            done
+            echo "${marker} received"
+          done
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --no-color --tail=200 || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          [[ -f .tunnel.pid ]] && kill "$(cat .tunnel.pid)" 2>/dev/null || true
+          docker compose down -v || true
+
+  android:
+    name: Android
+    needs: config
+    if: needs.config.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Checkout storefront-app
-        if: needs.config.outputs.android == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.APP_REPO }}
@@ -210,41 +250,67 @@ jobs:
           path: app
 
       - uses: actions/setup-node@v4
-        if: needs.config.outputs.android == 'true'
         with:
           node-version: 20
 
       - uses: actions/setup-java@v4
-        if: needs.config.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: 21
 
       - name: Install app dependencies
-        if: needs.config.outputs.android == 'true'
         working-directory: app
         run: |
           corepack enable
           yarn install --immutable || yarn install
 
       - name: Install Maestro
-        if: needs.config.outputs.android == 'true'
         run: |
           curl -fsSL https://get.maestro.mobile.dev | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Enable KVM
-        if: needs.config.outputs.android == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Wait for the stack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 90 * 60 ))
+          until gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[].name' | grep -qx 'mobile-stack'; do
+            if (( $(date +%s) > deadline )); then
+              echo "::error::The stack job did not become ready within 90 minutes."
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-stack
+          path: .
+
+      - name: Read the stack
+        id: stack
+        run: |
+          set -euo pipefail
+          URL="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['url'])")"
+          CODE="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['code'])")"
+          echo "::add-mask::$CODE"
+          python3 -c "import json; json.dump(json.load(open('mobile-stack.json'))['fixtures'], open('.mobile-fixtures.json', 'w'))"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
       - name: Capture Android
-        if: needs.config.outputs.android == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.code.outputs.value }}
+          STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           STRIPE_KEY: ${{ secrets.STOREFRONT_STRIPE_TEST_KEY }}
         with:
@@ -262,43 +328,26 @@ jobs:
             adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
             adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
             adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
-            ./scripts/mobile/capture.sh android app "${{ steps.tunnel.outputs.url }}"
+            ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
 
       - uses: actions/upload-artifact@v4
-        if: always() && needs.config.outputs.android == 'true'
+        if: always()
         with:
           name: storefront-app-android
           path: capture/out/storefront-app/android
           if-no-files-found: warn
           retention-days: 14
 
-      # ── Keep serving until iOS is done ───────────────────────────────────────────────────
-      - name: Wait for the iOS job
-        if: needs.config.outputs.ios == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          deadline=$(( $(date +%s) + 120 * 60 ))
-          until gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[].name' | grep -qx 'ios-done'; do
-            if (( $(date +%s) > deadline )); then
-              echo "::warning::Gave up waiting for the iOS job after 120 minutes."
-              break
-            fi
-            sleep 20
-          done
-
-      - name: Dump stack logs on failure
-        if: failure()
-        run: |
-          docker compose ps || true
-          docker compose logs --no-color --tail=200 || true
-
-      - name: Tear down
+      # Tells the stack job it can shut down. Uploaded whatever happened above.
+      - name: Signal done
         if: always()
-        run: |
-          [[ -f .tunnel.pid ]] && kill "$(cat .tunnel.pid)" 2>/dev/null || true
-          docker compose down -v || true
+        run: echo done > android-done.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-done
+          path: android-done.txt
+          retention-days: 1
 
   ios:
     name: iOS
@@ -411,6 +460,7 @@ jobs:
           URL="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['url'])")"
           CODE="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['code'])")"
           echo "::add-mask::$CODE"
+          python3 -c "import json; json.dump(json.load(open('mobile-stack.json'))['fixtures'], open('.mobile-fixtures.json', 'w'))"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
@@ -442,7 +492,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [config, stack, ios]
+    needs: [config, stack, android, ios]
     if: always() && needs.config.outputs.open_pr == 'true'
     runs-on: ubuntu-latest
     steps:
