@@ -39,6 +39,29 @@ mkdir -p "$OUT"
 fixture() { python3 -c "import json,sys; f=json.load(open('.mobile-fixtures.json')); v=f.get('$1') or {}; print(v.get('$2','') if isinstance(v, dict) else v)"; }
 PHONE="$(fixture customer_phone '')"
 
+# The Google Services Gradle plugin refuses to build without a Firebase config, which the app's
+# own CI writes from a secret. Push notifications play no part in screenshots, so a placeholder
+# for the app id is enough when none is present.
+android_firebase_placeholder() {
+    local file="$APP_DIR/android/app/google-services.json"
+    [[ -f "$file" ]] && return 0
+    cat >"$file" <<JSON
+{
+  "project_info": { "project_number": "000000000000", "project_id": "storefront-screenshots", "storage_bucket": "storefront-screenshots.appspot.com" },
+  "client": [
+    {
+      "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "${APP_ID}" } },
+      "oauth_client": [],
+      "api_key": [{ "current_key": "AIzaSyPlaceholderForScreenshotBuilds00000" }],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}
+JSON
+    echo "==> android: placeholder google-services.json (no Firebase config for this build)"
+}
+
 build_and_install() {
     case "$PLATFORM" in
         ios)
@@ -58,6 +81,7 @@ build_and_install() {
             # Release with the debug keystore when no upload key is configured: bundled JS,
             # installable on an emulator. One ABI (the emulator's) keeps the native build short.
             if [[ "$PHASE" != run ]]; then
+                android_firebase_placeholder
                 (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease -PreactNativeArchitectures=x86_64)
                 mkdir -p "$APKS"
                 cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$APKS/${EDITION}.apk"
@@ -126,15 +150,25 @@ for EDITION in "${EDITIONS[@]}"; do
             -e "CUSTOMER_PHONE=${PHONE}" \
             -e "VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE:-}"); then
             echo "${EDITION} (${THEME}): flow failed; partial screenshots kept" >>"$FAILURES"
+            PASSED=false
+        else
+            PASSED=true
         fi
         find "$SHOTS" "$DEBUG" "$APP_DIR/.maestro" "$HOME/.maestro/tests" -name 'storefront-app-*.png' -newer "$SHOTS/.start" -exec mv {} "$OUT/" \; 2>/dev/null || true
         rm -rf "$SHOTS"
+        # Debug output (a screenshot and hierarchy per step) is only worth keeping for a failure.
+        [[ "$PASSED" == true ]] && rm -rf "$DEBUG"
     done
 done
 
 if [[ "$PHASE" == build ]]; then
     echo "==> ${PLATFORM}: APKs in ${APKS#"$ROOT"/}"
-    [[ -s "$FAILURES" ]] && cat "$FAILURES"
+    ls "$APKS" 2>/dev/null || true
+    if [[ -s "$FAILURES" ]]; then
+        cat "$FAILURES"
+        # Nothing to install means nothing to capture; stop before booting an emulator.
+        compgen -G "$APKS/*.apk" >/dev/null || exit 1
+    fi
     exit 0
 fi
 
