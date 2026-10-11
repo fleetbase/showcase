@@ -8,6 +8,11 @@
 # (screenshots and view hierarchy at each failure) in debug/<edition>-<theme>/. Dark is the default theme
 # and carries no suffix, matching the console naming rule (NAMING.md).
 #
+# CAPTURE_PHASE splits Android in two (default: all):
+#   build  builds every edition's APK into capture/out/apks/ — run BEFORE booting the emulator:
+#          Gradle's native compile next to a running emulator starves a hosted runner
+#   run    installs those APKs and runs the flows
+#
 # Requires: a booted device, maestro on PATH, .mobile-fixtures.json (fixtures.sh), and for the
 # sign-in screens STOREFRONT_BYPASS_VERIFICATION_CODE (the same value the stack was started with).
 set -euo pipefail
@@ -23,6 +28,9 @@ EDITIONS=("$@")
 [[ ${#EDITIONS[@]} -eq 0 ]] && EDITIONS=(store network food-trucks network-food-trucks)
 
 APP_ID="com.storefront.app"
+PHASE="${CAPTURE_PHASE:-all}"
+APKS="${ROOT}/capture/out/apks"
+
 OUT="${ROOT}/capture/out/storefront-app/${PLATFORM}"
 FAILURES="${OUT}/failures.txt"
 mkdir -p "$OUT"
@@ -48,10 +56,16 @@ build_and_install() {
             ;;
         android)
             # Release with the debug keystore when no upload key is configured: bundled JS,
-            # installable on an emulator.
-            (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease)
-            adb uninstall "$APP_ID" >/dev/null 2>&1 || true
-            adb install -r "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk"
+            # installable on an emulator. One ABI (the emulator's) keeps the native build short.
+            if [[ "$PHASE" != run ]]; then
+                (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease -PreactNativeArchitectures=x86_64)
+                mkdir -p "$APKS"
+                cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$APKS/${EDITION}.apk"
+            fi
+            if [[ "$PHASE" != build ]]; then
+                adb uninstall "$APP_ID" >/dev/null 2>&1 || true
+                adb install -r "$APKS/${EDITION}.apk"
+            fi
             ;;
     esac
 }
@@ -70,6 +84,17 @@ for EDITION in "${EDITIONS[@]}"; do
         echo "${EDITION}: build failed" >>"$FAILURES"
         continue
     fi
+    [[ "$PHASE" == build ]] && continue
+
+    # Flows declare no variable defaults (a flow's own env would override -e), so every one
+    # is passed here. A Network names its screenshots -network and has its own Search tab.
+    FLOW="$EDITION"
+    QUALIFIER=""
+    SEARCH_TAB="tab-store-search"
+    case "$EDITION" in
+        network) QUALIFIER="-network" ;;
+        network-food-trucks) FLOW="food-trucks" QUALIFIER="-network" SEARCH_TAB="tab-network-search" ;;
+    esac
 
     case "$EDITION" in
         food-trucks) KIND=truck_location ;;
@@ -90,9 +115,12 @@ for EDITION in "${EDITIONS[@]}"; do
         # Where takeScreenshot writes has moved between Maestro versions (the working directory,
         # the test output directory), so run in SHOTS with SHOTS as the output directory and
         # collect by name from anywhere it may have landed.
-        if ! (cd "$SHOTS" && maestro test --test-output-dir "$DEBUG" "$APP_DIR/.maestro/screenshots/${EDITION}.yaml" \
+        if ! (cd "$SHOTS" && maestro test --test-output-dir "$DEBUG" "$APP_DIR/.maestro/screenshots/${FLOW}.yaml" \
             -e "APP_ID=${APP_ID}" \
             -e "SHOT_SUFFIX=${SUFFIX}" \
+            -e "QUALIFIER=${QUALIFIER}" \
+            -e "SEARCH_TAB=${SEARCH_TAB}" \
+            -e "SEARCH_QUERY=${SEARCH_QUERY:-tea}" \
             -e "LATITUDE=${LAT:-1.2834}" \
             -e "LONGITUDE=${LNG:-103.8607}" \
             -e "CUSTOMER_PHONE=${PHONE}" \
@@ -103,6 +131,12 @@ for EDITION in "${EDITIONS[@]}"; do
         rm -rf "$SHOTS"
     done
 done
+
+if [[ "$PHASE" == build ]]; then
+    echo "==> ${PLATFORM}: APKs in ${APKS#"$ROOT"/}"
+    [[ -s "$FAILURES" ]] && cat "$FAILURES"
+    exit 0
+fi
 
 COUNT="$(find "$OUT" -maxdepth 1 -name 'storefront-app-*.png' | wc -l | tr -d ' ')"
 echo "==> ${PLATFORM}: ${COUNT} screenshots in ${OUT#"$ROOT"/}"

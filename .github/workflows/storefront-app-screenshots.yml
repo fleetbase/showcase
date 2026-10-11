@@ -317,6 +317,15 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
+      # Before the emulator boots: Gradle's native compile next to a running emulator starved
+      # the runner until it was shut down.
+      - name: Build the APKs
+        env:
+          CAPTURE_PHASE: build
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
+        run: ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
+
       - name: Capture Android
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -339,7 +348,7 @@ jobs:
             adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
             adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
             adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
-            ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
+            CAPTURE_PHASE=run ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
 
       - uses: actions/upload-artifact@v4
         if: always()
