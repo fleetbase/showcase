@@ -168,9 +168,12 @@ jobs:
       - name: Provision
         run: ./scripts/provision.sh
 
+      # The org's Stripe test keys, so the app's checkout can create a real test payment.
       - name: Seed fixtures
         env:
           SHOWCASE_PASSWORD: ${{ secrets.SHOWCASE_PASSWORD }}
+          SEED_STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET || vars.STRIPE_TEST_SECRET }}
+          SEED_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
         run: ./scripts/seed.sh
 
       - name: Read mobile fixtures
@@ -319,7 +322,7 @@ jobs:
         env:
           STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-          STRIPE_KEY: ${{ secrets.STOREFRONT_STRIPE_TEST_KEY }}
+          STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
         with:
           api-level: 35
           target: google_apis
@@ -476,7 +479,7 @@ jobs:
         env:
           SIMULATOR_ID: ${{ steps.sim.outputs.udid }}
           STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
-          STRIPE_KEY: ${{ secrets.STOREFRONT_STRIPE_TEST_KEY }}
+          STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
         run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}"
 
       - uses: actions/upload-artifact@v4
