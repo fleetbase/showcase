@@ -28,6 +28,8 @@ EDITIONS=("$@")
 [[ ${#EDITIONS[@]} -eq 0 ]] && EDITIONS=(store network food-trucks network-food-trucks)
 
 APP_ID="com.storefront.app"
+# The iOS driver can take minutes to come up on a cold simulator after a build.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-240000}"
 PHASE="${CAPTURE_PHASE:-all}"
 APKS="${ROOT}/capture/out/apks"
 
@@ -139,21 +141,26 @@ for EDITION in "${EDITIONS[@]}"; do
         # Where takeScreenshot writes has moved between Maestro versions (the working directory,
         # the test output directory), so run in SHOTS with SHOTS as the output directory and
         # collect by name from anywhere it may have landed.
-        if ! (cd "$SHOTS" && maestro test --test-output-dir "$DEBUG" "$APP_DIR/.maestro/screenshots/${FLOW}.yaml" \
-            -e "APP_ID=${APP_ID}" \
-            -e "SHOT_SUFFIX=${SUFFIX}" \
-            -e "QUALIFIER=${QUALIFIER}" \
-            -e "SEARCH_TAB=${SEARCH_TAB}" \
-            -e "SEARCH_QUERY=${SEARCH_QUERY:-tea}" \
-            -e "LATITUDE=${LAT:-1.2834}" \
-            -e "LONGITUDE=${LNG:-103.8607}" \
-            -e "CUSTOMER_PHONE=${PHONE}" \
-            -e "VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE:-}"); then
-            echo "${EDITION} (${THEME}): flow failed; partial screenshots kept" >>"$FAILURES"
-            PASSED=false
-        else
-            PASSED=true
-        fi
+        # One retry: the first launch after a build sometimes loses the driver (iOS "driver not
+        # ready in time") or a tap, and a second pass usually goes through.
+        PASSED=false
+        for ATTEMPT in 1 2; do
+            if (cd "$SHOTS" && maestro test --test-output-dir "$DEBUG" "$APP_DIR/.maestro/screenshots/${FLOW}.yaml" \
+                -e "APP_ID=${APP_ID}" \
+                -e "SHOT_SUFFIX=${SUFFIX}" \
+                -e "QUALIFIER=${QUALIFIER}" \
+                -e "SEARCH_TAB=${SEARCH_TAB}" \
+                -e "SEARCH_QUERY=${SEARCH_QUERY:-tea}" \
+                -e "LATITUDE=${LAT:-1.2834}" \
+                -e "LONGITUDE=${LNG:-103.8607}" \
+                -e "CUSTOMER_PHONE=${PHONE}" \
+                -e "VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE:-}"); then
+                PASSED=true
+                break
+            fi
+            echo "==> ${EDITION} (${THEME}): attempt ${ATTEMPT} failed"
+        done
+        [[ "$PASSED" == true ]] || echo "${EDITION} (${THEME}): flow failed; partial screenshots kept" >>"$FAILURES"
         find "$SHOTS" "$DEBUG" "$APP_DIR/.maestro" "$HOME/.maestro/tests" -name 'storefront-app-*.png' -newer "$SHOTS/.start" -exec mv {} "$OUT/" \; 2>/dev/null || true
         rm -rf "$SHOTS"
         # Debug output (a screenshot and hierarchy per step) is only worth keeping for a failure.

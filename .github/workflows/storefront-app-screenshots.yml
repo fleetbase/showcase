@@ -326,6 +326,15 @@ jobs:
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
         run: ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
 
+      # Gradle's and Kotlin's daemons stay resident after the build and hold several GB, which
+      # the emulator then runs short of (it froze and the runner was shut down).
+      - name: Stop the build daemons
+        run: |
+          (cd app/android && ./gradlew --stop) || true
+          pkill -f KotlinCompileDaemon || true
+          pkill -f GradleDaemon || true
+          free -h
+
       - name: Capture Android
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -338,6 +347,8 @@ jobs:
           arch: x86_64
           profile: pixel_7_pro
           disk-size: 6000M
+          ram-size: 2048M
+          cores: 2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           # Demo mode: a fixed clock, full battery and signal in every status bar.
