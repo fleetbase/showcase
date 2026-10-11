@@ -19,8 +19,10 @@ use Illuminate\Support\Str;
  * history. Both are vendored from Storefront's own testing seeders; see their headers.
  *
  * Upstream seeds no food trucks and no push-notification channels, and Storefront has a
- * screen for each, so they are added here. The food truck reuses a Fleet-Ops vehicle and
- * service area rather than creating new ones, so no Fleet-Ops screen changes because of it.
+ * screen for each, so they are added here. Food trucks reuse Fleet-Ops vehicles and service
+ * areas rather than creating new ones, so no Fleet-Ops screen changes because of them: one for
+ * the single store, and one for a network member store (Rochor Noodle House) so the Storefront
+ * app's trucks home can be captured in a Network too.
  *
  * Runs after Fleet-Ops: Storefront orders are Fleet-Ops orders, and the truck needs a vehicle.
  */
@@ -41,8 +43,14 @@ class StorefrontSeeder extends Seeder
         $network = Network::where('options->seed', 'showcase-storefront-network')->first();
 
         if ($store) {
-            $this->seedFoodTruck($store);
+            $this->seedFoodTruck($store, 'GBB-1006', 'market_truck');
             $this->seedNotificationChannel($store);
+        }
+
+        $memberStore = $this->seededNetworkStore('rochor-noodle-house');
+        if ($memberStore) {
+            // CEN-02: an online van in the central service area, near the store.
+            $this->seedFoodTruck($memberStore, 'GBB-1010', 'rochor_truck');
         }
 
         $this->announceFixtures(array_filter([
@@ -56,8 +64,8 @@ class StorefrontSeeder extends Seeder
     {
         // Neither table has a tag column of its own: the truck goes with its seeded store, the
         // channel is tagged inside `options`.
-        $store = $this->seededStore();
-        if ($store) {
+        $stores = array_filter([$this->seededStore(), $this->seededNetworkStore('rochor-noodle-house')]);
+        foreach ($stores as $store) {
             FoodTruck::where('store_uuid', $store->uuid)->forceDelete();
         }
         NotificationChannel::where('options->seed', static::TAG)->forceDelete();
@@ -71,18 +79,23 @@ class StorefrontSeeder extends Seeder
         return Store::where('meta->seed', 'showcase-storefront-store')->orderBy('created_at')->first();
     }
 
+    protected function seededNetworkStore(string $key): ?Store
+    {
+        return Store::where('meta->seed_id', 'store:' . $key)->orderBy('created_at')->first();
+    }
+
     protected function publicId(string $type, string $seedId): string
     {
         return $type . '_' . substr(hash('sha256', static::TAG . ':' . $seedId), 0, 10);
     }
 
-    protected function seedFoodTruck(Store $store): void
+    protected function seedFoodTruck(Store $store, string $plate, string $seedId): void
     {
-        $vehicle = Vehicle::where('company_uuid', $store->company_uuid)->where('plate_number', 'GBB-1006')->first();
+        $vehicle = Vehicle::where('company_uuid', $store->company_uuid)->where('plate_number', $plate)->first();
         $area    = ServiceArea::where('company_uuid', $store->company_uuid)->where('name', 'Singapore Central')->first();
         $zone    = $area ? Zone::where('service_area_uuid', $area->uuid)->orderBy('created_at')->first() : null;
         if (!$vehicle) {
-            $this->command?->warn('Food truck skipped: Fleet-Ops vehicle GBB-1006 not found.');
+            $this->command?->warn("Food truck skipped: Fleet-Ops vehicle {$plate} not found.");
 
             return;
         }
@@ -90,7 +103,7 @@ class StorefrontSeeder extends Seeder
         $truck = new FoodTruck();
         $truck->forceFill([
             'uuid'              => (string) Str::uuid(),
-            'public_id'         => $this->publicId('food_truck', 'market_truck'),
+            'public_id'         => $this->publicId('food_truck', $seedId),
             'company_uuid'      => $store->company_uuid,
             'created_by_uuid'   => $store->created_by_uuid,
             'store_uuid'        => $store->uuid,

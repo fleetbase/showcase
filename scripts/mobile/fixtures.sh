@@ -33,5 +33,6 @@ for key in ('store_key', 'network_key', 'fleetbase_key', 'customer_phone'):
 # Keys are credentials of a throwaway stack, but they still don't belong in a public log.
 print('::add-mask::' + f['fleetbase_key'])
 print('==> Mobile fixtures: store and network keys, SDK key, customer, '
-      f"store at {f.get('store_location')}, truck at {f.get('truck_location')}")
+      f"store at {f.get('store_location')}, trucks zone at {f.get('truck_location')}, "
+      f"network trucks zone at {f.get('network_truck_location')}")
 PY

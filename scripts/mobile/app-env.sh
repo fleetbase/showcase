@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Writes the Storefront app's .env for one edition, pointed at the stack's public URL.
 #
-#   ./scripts/mobile/app-env.sh <store|network|food-trucks> <app dir> <https://… stack URL>
+#   ./scripts/mobile/app-env.sh <store|network|food-trucks|network-food-trucks> <app dir> <https://… stack URL>
 #
 # The values are compiled into the native build (react-native-config), so every edition is
 # its own build.
@@ -26,7 +26,7 @@ env = {
     'APP_IDENTIFIER': 'com.storefront.app',
     'FLEETBASE_HOST': url,
     'FLEETBASE_KEY': f['fleetbase_key'],
-    'STOREFRONT_KEY': f['network_key'] if edition == 'network' else f['store_key'],
+    'STOREFRONT_KEY': f['network_key'] if edition.startswith('network') else f['store_key'],
     # Realtime goes through the same origin: the proxy routes /socketcluster/ to the socket.
     'SOCKETCLUSTER_HOST': host.hostname,
     'SOCKETCLUSTER_PORT': str(host.port or (443 if secure else 80)),
@@ -36,9 +36,9 @@ env = {
     'AVAILABLE_LOCALES': 'en',
     'PAYMENT_GATEWAY': 'stripe',
 }
-if edition == 'food-trucks':
+if edition.endswith('food-trucks'):
     env['HOME_SCREEN'] = 'foodTrucks'
-location = f.get('truck_location' if edition == 'food-trucks' else 'store_location')
+location = f.get({'food-trucks': 'truck_location', 'network-food-trucks': 'network_truck_location'}.get(edition, 'store_location'))
 if location:
     env['DEFAULT_COORDINATES'] = f"{location['latitude']},{location['longitude']}"
 

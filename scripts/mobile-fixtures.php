@@ -42,8 +42,36 @@ try {
     $storeLocation = \Fleetbase\Storefront\Models\StoreLocation::where('store_uuid', $store->uuid)->orderBy('created_at')->first();
     $storePlace    = $storeLocation ? \Fleetbase\FleetOps\Models\Place::where('uuid', $storeLocation->place_uuid)->first() : null;
 
-    $truck   = \Fleetbase\Storefront\Models\FoodTruck::where('store_uuid', $store->uuid)->first();
-    $vehicle = $truck ? \Fleetbase\FleetOps\Models\Vehicle::where('uuid', $truck->vehicle_uuid)->first() : null;
+    // Where to put the customer for a trucks home: inside the truck's zone (else its service
+    // area), so the app finds the zone and lists the truck as nearby. The vehicle itself may be
+    // parked anywhere; a truck counts as serving the customer by its zone.
+    $centroid = function ($geometry) {
+        if (!$geometry) {
+            return null;
+        }
+        $geo    = json_decode(json_encode($geometry), true);
+        $coords = $geo['coordinates'] ?? [];
+        $ring   = ($geo['type'] ?? '') === 'MultiPolygon' ? ($coords[0][0] ?? []) : ($coords[0] ?? []);
+        if (count($ring) < 3) {
+            return null;
+        }
+        $lng = array_sum(array_column($ring, 0)) / count($ring);
+        $lat = array_sum(array_column($ring, 1)) / count($ring);
+
+        return ['latitude' => round($lat, 6), 'longitude' => round($lng, 6)];
+    };
+    $truckCustomer = function (?\Fleetbase\Storefront\Models\Store $owner) use ($centroid, $point) {
+        $truck = $owner ? \Fleetbase\Storefront\Models\FoodTruck::where('store_uuid', $owner->uuid)->first() : null;
+        if (!$truck) {
+            return null;
+        }
+        $zone = $truck->zone_uuid ? \Fleetbase\FleetOps\Models\Zone::where('uuid', $truck->zone_uuid)->first() : null;
+        $area = $truck->service_area_uuid ? \Fleetbase\FleetOps\Models\ServiceArea::where('uuid', $truck->service_area_uuid)->first() : null;
+        $vehicle = \Fleetbase\FleetOps\Models\Vehicle::where('uuid', $truck->vehicle_uuid)->first();
+
+        return $centroid($zone?->border) ?? $centroid($area?->border) ?? $point($vehicle?->location);
+    };
+    $memberStore = \Fleetbase\Storefront\Models\Store::where('meta->seed_id', 'store:rochor-noodle-house')->orderBy('created_at')->first();
 
     // The review customer: the store's first seeded customer, who has order history and an
     // order in progress (StoreSeeder's order 1). Login looks customers up by their user's phone.
@@ -61,7 +89,8 @@ try {
         'fleetbase_key'  => $credential->key,
         'currency'       => $store->currency,
         'store_location' => $point($storePlace?->location),
-        'truck_location' => $point($vehicle?->location),
+        'truck_location'         => $truckCustomer($store),
+        'network_truck_location' => $truckCustomer($memberStore),
         'customer_phone' => preg_replace('/[^\d+]/', '', $phone),
     ])) . PHP_EOL;
 } catch (\Throwable $e) {

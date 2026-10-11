@@ -19,7 +19,7 @@ APP_DIR="$(cd "$2" && pwd)"
 URL="$3"
 shift 3
 EDITIONS=("$@")
-[[ ${#EDITIONS[@]} -eq 0 ]] && EDITIONS=(store network food-trucks)
+[[ ${#EDITIONS[@]} -eq 0 ]] && EDITIONS=(store network food-trucks network-food-trucks)
 
 APP_ID="com.storefront.app"
 OUT="${ROOT}/capture/out/storefront-app/${PLATFORM}"
@@ -70,8 +70,11 @@ for EDITION in "${EDITIONS[@]}"; do
         continue
     fi
 
-    KIND=store_location
-    [[ "$EDITION" == food-trucks ]] && KIND=truck_location
+    case "$EDITION" in
+        food-trucks) KIND=truck_location ;;
+        network-food-trucks) KIND=network_truck_location ;;
+        *) KIND=store_location ;;
+    esac
     LAT="$(fixture "$KIND" latitude)"
     LNG="$(fixture "$KIND" longitude)"
 
