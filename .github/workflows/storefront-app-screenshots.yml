@@ -468,6 +468,22 @@ jobs:
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 5
 
+      # Maestro's iOS driver (an XCTest runner) has to be built and installed on the simulator
+      # the first time, which took longer than its startup timeout on the first flow of
+      # several runs. Start it once now, while the stack is still seeding.
+      - name: Start the Maestro driver
+        env:
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
+        run: |
+          for attempt in 1 2 3; do
+            if maestro --device "${{ steps.sim.outputs.udid }}" hierarchy >/dev/null 2>&1; then
+              echo "Maestro driver ready (attempt ${attempt})"
+              exit 0
+            fi
+            echo "Maestro driver not ready (attempt ${attempt})"
+          done
+          echo "::warning::The Maestro driver did not start; the first flow will try again."
+
       - name: Wait for the stack
         env:
           GH_TOKEN: ${{ github.token }}

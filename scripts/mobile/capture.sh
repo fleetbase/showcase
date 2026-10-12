@@ -29,7 +29,7 @@ EDITIONS=("$@")
 
 APP_ID="com.storefront.app"
 # The iOS driver can take minutes to come up on a cold simulator after a build.
-export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-240000}"
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-600000}"
 PHASE="${CAPTURE_PHASE:-all}"
 APKS="${ROOT}/capture/out/apks"
 
