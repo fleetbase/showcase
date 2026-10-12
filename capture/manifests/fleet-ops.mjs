@@ -679,7 +679,8 @@ export default {
             id: 'tracking-page-settings',
             file: 'fleet-ops-tracking-page-settings',
             url: '/fleet-ops/settings/tracking-page',
-            waitFor: 'main',
+            // The slug field renders once the settings have loaded (not on a load failure).
+            waitFor: '#tracking-page-slug',
             requires: { 'fleetops-engine': '>=0.6.72' },
             extraSettleMs: 2000,
         },
