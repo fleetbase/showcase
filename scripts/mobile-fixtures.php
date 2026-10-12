@@ -9,6 +9,11 @@
 // base64-encodes it and eval()s it inside `php artisan tinker --execute=...`, so it omits the
 // opening <?php tag and uses fully-qualified class names.
 //
+// It also opens every store all day, every day. The stack exists only for this capture, and a
+// run can happen at any hour: a store that reads "Closed" at 3am Singapore time can't take an
+// order, so the cart and checkout flows would fail, and the open/closed line would change the
+// screenshots from one run to the next.
+//
 // Prints one MOBILE_FIXTURES={json} line, or MOBILE_FIXTURES_ERROR=<reason>.
 
 try {
@@ -29,6 +34,25 @@ try {
         ->first();
     if (!$credential) {
         throw new \RuntimeException('API credential "Production Backend" not found; run seed.sh developers');
+    }
+
+    $locationUuids = \Fleetbase\Storefront\Models\StoreLocation::whereIn(
+        'store_uuid',
+        \Fleetbase\Storefront\Models\Store::where('company_uuid', $company->uuid)->pluck('uuid')
+    )->pluck('uuid');
+    foreach ($locationUuids as $locationUuid) {
+        \Fleetbase\Storefront\Models\StoreHour::where('store_location_uuid', $locationUuid)->forceDelete();
+        foreach (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day) {
+            $hour = new \Fleetbase\Storefront\Models\StoreHour();
+            $hour->forceFill([
+                'uuid'                => (string) \Illuminate\Support\Str::uuid(),
+                'store_location_uuid' => $locationUuid,
+                'day_of_week'         => $day,
+                'start'               => '00:00',
+                'end'                 => '23:59',
+            ]);
+            \Fleetbase\Storefront\Models\StoreHour::withoutEvents(fn () => $hour->save());
+        }
     }
 
     $point = function ($location) {

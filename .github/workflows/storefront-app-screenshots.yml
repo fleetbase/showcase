@@ -322,7 +322,7 @@ jobs:
       - name: Build the APKs
         env:
           CAPTURE_PHASE: build
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
         run: ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
 
@@ -339,7 +339,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
         with:
           api-level: 35
@@ -350,7 +350,8 @@ jobs:
           ram-size: 2048M
           cores: 2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          # Singapore time, like the seeded data and the console capture.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -timezone Asia/Singapore
           # Demo mode: a fixed clock, full battery and signal in every status bar.
           script: |
             adb shell settings put global sysui_demo_allowed 1
@@ -438,6 +439,8 @@ jobs:
         id: sim
         run: |
           set -euo pipefail
+          # The simulator takes the Mac's time zone: Singapore, like the seeded data.
+          sudo systemsetup -settimezone Asia/Singapore >/dev/null 2>&1 || true
           UDID="$(xcrun simctl list devices available -j | python3 -c "
           import json, sys
           devices = [d for runtime in json.load(sys.stdin)['devices'].values() for d in runtime]
@@ -520,6 +523,58 @@ jobs:
           name: ios-done
           path: ios-done.txt
           retention-days: 1
+
+  # A review page for every run, PR or not: download `storefront-app-gallery` and open
+  # index.html. Fails the run when any flow stopped early, after the page is uploaded.
+  gallery:
+    name: Gallery
+    needs: [config, android, ios]
+    if: always() && needs.config.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install capture dependencies
+        working-directory: capture
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: storefront-app-*
+          path: capture/out/raw
+
+      - name: Build the gallery
+        run: |
+          node capture/bin/gallery-mobile.mjs \
+            --ios capture/out/raw/storefront-app-ios \
+            --android capture/out/raw/storefront-app-android \
+            --out capture/out/storefront-app-gallery \
+            --run "${{ github.run_id }}" \
+            --app-ref "${{ needs.config.outputs.app_ref }}" \
+            --release "${{ needs.config.outputs.tag }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storefront-app-gallery
+          path: capture/out/storefront-app-gallery
+          retention-days: 30
+
+      - name: Fail the run if any flow stopped early
+        run: |
+          failed=0
+          for platform in ios android; do
+            f="capture/out/raw/storefront-app-$platform/failures.txt"
+            if [[ -s "$f" ]]; then
+              echo "::error::$platform flows stopped early:"
+              sed "s/^/  /" "$f"
+              failed=1
+            fi
+          done
+          exit $failed
 
   publish:
     name: Publish
