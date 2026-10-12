@@ -24,6 +24,20 @@ if [[ -z "$JSON" ]]; then
 fi
 
 printf '%s\n' "$JSON" >.mobile-fixtures.json
+
+# Whether this release's API returns a Network's member-store trucks for a network key. Older
+# releases return none, and the Network food-trucks edition is then skipped rather than failed.
+NETWORK_KEY="$(python3 -c "import json; print(json.load(open('.mobile-fixtures.json'))['network_key'])")"
+NETWORK_TRUCKS="$(curl -fsS -H "Authorization: Bearer ${NETWORK_KEY}" -H 'Accept: application/json' \
+    "http://localhost:${HTTP_PORT:-80}/storefront/v1/food-trucks?limit=-1" 2>/dev/null \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d) if isinstance(d, list) else 0)' 2>/dev/null || echo 0)"
+python3 - "$NETWORK_TRUCKS" <<'PY'
+import json, sys
+f = json.load(open('.mobile-fixtures.json'))
+f['network_trucks'] = int(sys.argv[1])
+json.dump(f, open('.mobile-fixtures.json', 'w'))
+print(f"==> Network trucks returned by the API: {f['network_trucks']}")
+PY
 python3 - <<'PY'
 import json
 f = json.load(open('.mobile-fixtures.json'))

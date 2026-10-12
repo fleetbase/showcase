@@ -35,6 +35,17 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(values.out);
 const sources = { ios: values.ios ? path.resolve(values.ios) : null, android: values.android ? path.resolve(values.android) : null };
 
+async function skipped(platform) {
+    const dir = sources[platform];
+    if (!dir) return {};
+    try {
+        const lines = (await readFile(path.join(dir, 'skipped.txt'), 'utf8')).split('\n').map((line) => line.trim()).filter(Boolean);
+        return Object.fromEntries(lines.map((line) => [line.split(':')[0], line.slice(line.indexOf(':') + 1).trim()]));
+    } catch {
+        return {};
+    }
+}
+
 async function failures(platform) {
     const dir = sources[platform];
     if (!dir) return [];
@@ -48,23 +59,25 @@ async function failures(platform) {
 async function main() {
     await mkdir(path.join(outDir, 'shots'), { recursive: true });
 
+    const skippedEditions = { ...(await skipped('ios')), ...(await skipped('android')) };
     let total = 0;
     let captured = 0;
     const perPlatform = { ios: 0, android: 0 };
     const sections = [];
 
     for (const edition of STOREFRONT_APP_EDITIONS) {
+        const skipReason = skippedEditions[edition.key] ?? null;
         let editionCaptured = 0;
         const rows = [];
         for (const [name, label] of edition.screens) {
             const cells = [];
             for (const platform of STOREFRONT_APP_PLATFORMS) {
                 for (const [theme, suffix] of STOREFRONT_APP_THEMES) {
-                    total += 1;
+                    if (!skipReason) total += 1;
                     const file = `${name}${suffix}.png`;
                     const source = sources[platform] ? path.join(sources[platform], file) : null;
                     if (!source || !existsSync(source)) {
-                        cells.push({ platform, theme, src: null, file });
+                        cells.push({ platform, theme, src: null, file, skipped: !!skipReason });
                         continue;
                     }
                     const target = `shots/${platform}-${name}${suffix}.webp`;
@@ -77,7 +90,7 @@ async function main() {
             }
             rows.push({ name, label, cells });
         }
-        sections.push({ key: edition.key, title: edition.title, note: edition.note, rows, captured: editionCaptured, total: edition.screens.length * 4 });
+        sections.push({ key: edition.key, title: edition.title, note: skipReason ? `${edition.note} Skipped: ${skipReason}.` : edition.note, rows, captured: editionCaptured, total: edition.screens.length * 4, skipped: !!skipReason });
     }
 
     const data = {

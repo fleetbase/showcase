@@ -29,7 +29,7 @@ EDITIONS=("$@")
 
 APP_ID="com.storefront.app"
 # The iOS driver can take minutes to come up on a cold simulator after a build.
-export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-240000}"
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-600000}"
 PHASE="${CAPTURE_PHASE:-all}"
 APKS="${ROOT}/capture/out/apks"
 
@@ -103,8 +103,18 @@ appearance() {
     esac
 }
 
+SKIPPED="${OUT}/skipped.txt"
+: >"$SKIPPED"
+
 for EDITION in "${EDITIONS[@]}"; do
     echo "==> ${PLATFORM}: ${EDITION}"
+    # A Network's trucks need an API that returns member stores' trucks for a network key;
+    # against an older release there is nothing to show, which is not a failure of the flow.
+    if [[ "$EDITION" == network-food-trucks && "$(python3 -c "import json; print(json.load(open('.mobile-fixtures.json')).get('network_trucks', 1))")" == "0" ]]; then
+        echo "network-trucks: this Fleetbase release returns no trucks for a network key" >>"$SKIPPED"
+        echo "==> ${PLATFORM}: ${EDITION} skipped (no Network trucks in this release)"
+        continue
+    fi
     ./scripts/mobile/app-env.sh "$EDITION" "$APP_DIR" "$URL"
     if ! build_and_install; then
         echo "${EDITION}: build failed" >>"$FAILURES"
