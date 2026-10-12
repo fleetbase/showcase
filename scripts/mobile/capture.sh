@@ -4,8 +4,14 @@
 #
 #   ./scripts/mobile/capture.sh <ios|android> <app dir> <https://… stack URL> [editions…]
 #
-# Output: capture/out/storefront-app/<platform>/<shot>[-light].png. Dark is the default theme
+# Output: capture/out/storefront-app/<platform>/<shot>[-light].png, and Maestro's debug output
+# (screenshots and view hierarchy at each failure) in debug/<edition>-<theme>/. Dark is the default theme
 # and carries no suffix, matching the console naming rule (NAMING.md).
+#
+# CAPTURE_PHASE splits Android in two (default: all):
+#   build  builds every edition's APK into capture/out/apks/ — run BEFORE booting the emulator:
+#          Gradle's native compile next to a running emulator starves a hosted runner
+#   run    installs those APKs and runs the flows
 #
 # Requires: a booted device, maestro on PATH, .mobile-fixtures.json (fixtures.sh), and for the
 # sign-in screens STOREFRONT_BYPASS_VERIFICATION_CODE (the same value the stack was started with).
@@ -22,6 +28,11 @@ EDITIONS=("$@")
 [[ ${#EDITIONS[@]} -eq 0 ]] && EDITIONS=(store network food-trucks network-food-trucks)
 
 APP_ID="com.storefront.app"
+# The iOS driver can take minutes to come up on a cold simulator after a build.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-240000}"
+PHASE="${CAPTURE_PHASE:-all}"
+APKS="${ROOT}/capture/out/apks"
+
 OUT="${ROOT}/capture/out/storefront-app/${PLATFORM}"
 FAILURES="${OUT}/failures.txt"
 mkdir -p "$OUT"
@@ -29,6 +40,29 @@ mkdir -p "$OUT"
 
 fixture() { python3 -c "import json,sys; f=json.load(open('.mobile-fixtures.json')); v=f.get('$1') or {}; print(v.get('$2','') if isinstance(v, dict) else v)"; }
 PHONE="$(fixture customer_phone '')"
+
+# The Google Services Gradle plugin refuses to build without a Firebase config, which the app's
+# own CI writes from a secret. Push notifications play no part in screenshots, so a placeholder
+# for the app id is enough when none is present.
+android_firebase_placeholder() {
+    local file="$APP_DIR/android/app/google-services.json"
+    [[ -f "$file" ]] && return 0
+    cat >"$file" <<JSON
+{
+  "project_info": { "project_number": "000000000000", "project_id": "storefront-screenshots", "storage_bucket": "storefront-screenshots.appspot.com" },
+  "client": [
+    {
+      "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "${APP_ID}" } },
+      "oauth_client": [],
+      "api_key": [{ "current_key": "AIzaSyPlaceholderForScreenshotBuilds00000" }],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}
+JSON
+    echo "==> android: placeholder google-services.json (no Firebase config for this build)"
+}
 
 build_and_install() {
     case "$PLATFORM" in
@@ -47,10 +81,17 @@ build_and_install() {
             ;;
         android)
             # Release with the debug keystore when no upload key is configured: bundled JS,
-            # installable on an emulator.
-            (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease)
-            adb uninstall "$APP_ID" >/dev/null 2>&1 || true
-            adb install -r "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk"
+            # installable on an emulator. One ABI (the emulator's) keeps the native build short.
+            if [[ "$PHASE" != run ]]; then
+                android_firebase_placeholder
+                (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease -PreactNativeArchitectures=x86_64) || return 1
+                mkdir -p "$APKS"
+                cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$APKS/${EDITION}.apk" || return 1
+            fi
+            if [[ "$PHASE" != build ]]; then
+                adb uninstall "$APP_ID" >/dev/null 2>&1 || true
+                adb install -r "$APKS/${EDITION}.apk" || return 1
+            fi
             ;;
     esac
 }
@@ -69,6 +110,17 @@ for EDITION in "${EDITIONS[@]}"; do
         echo "${EDITION}: build failed" >>"$FAILURES"
         continue
     fi
+    [[ "$PHASE" == build ]] && continue
+
+    # Flows declare no variable defaults (a flow's own env would override -e), so every one
+    # is passed here. A Network names its screenshots -network and has its own Search tab.
+    FLOW="$EDITION"
+    QUALIFIER=""
+    SEARCH_TAB="tab-store-search"
+    case "$EDITION" in
+        network) QUALIFIER="-network" ;;
+        network-food-trucks) FLOW="food-trucks" QUALIFIER="-network" SEARCH_TAB="tab-network-search" ;;
+    esac
 
     case "$EDITION" in
         food-trucks) KIND=truck_location ;;
@@ -83,22 +135,51 @@ for EDITION in "${EDITIONS[@]}"; do
         SUFFIX=""
         [[ "$THEME" == light ]] && SUFFIX="-light"
         SHOTS="$(mktemp -d)"
-        # takeScreenshot writes to the working directory.
-        if ! (cd "$SHOTS" && maestro test "$APP_DIR/.maestro/screenshots/${EDITION}.yaml" \
-            -e "APP_ID=${APP_ID}" \
-            -e "SHOT_SUFFIX=${SUFFIX}" \
-            -e "LATITUDE=${LAT:-1.2834}" \
-            -e "LONGITUDE=${LNG:-103.8607}" \
-            -e "CUSTOMER_PHONE=${PHONE}" \
-            -e "VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE:-}"); then
-            echo "${EDITION} (${THEME}): flow failed; partial screenshots kept" >>"$FAILURES"
-        fi
-        find "$SHOTS" -maxdepth 1 -name '*.png' -exec mv {} "$OUT/" \;
+        DEBUG="${OUT}/debug/${EDITION}-${THEME}"
+        mkdir -p "$DEBUG"
+        touch "$SHOTS/.start"
+        # Where takeScreenshot writes has moved between Maestro versions (the working directory,
+        # the test output directory), so run in SHOTS with SHOTS as the output directory and
+        # collect by name from anywhere it may have landed.
+        # One retry: the first launch after a build sometimes loses the driver (iOS "driver not
+        # ready in time") or a tap, and a second pass usually goes through.
+        PASSED=false
+        for ATTEMPT in 1 2; do
+            if (cd "$SHOTS" && maestro test --test-output-dir "$DEBUG" "$APP_DIR/.maestro/screenshots/${FLOW}.yaml" \
+                -e "APP_ID=${APP_ID}" \
+                -e "SHOT_SUFFIX=${SUFFIX}" \
+                -e "QUALIFIER=${QUALIFIER}" \
+                -e "SEARCH_TAB=${SEARCH_TAB}" \
+                -e "SEARCH_QUERY=${SEARCH_QUERY:-tea}" \
+                -e "LATITUDE=${LAT:-1.2834}" \
+                -e "LONGITUDE=${LNG:-103.8607}" \
+                -e "CUSTOMER_PHONE=${PHONE}" \
+                -e "VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE:-}"); then
+                PASSED=true
+                break
+            fi
+            echo "==> ${EDITION} (${THEME}): attempt ${ATTEMPT} failed"
+        done
+        [[ "$PASSED" == true ]] || echo "${EDITION} (${THEME}): flow failed; partial screenshots kept" >>"$FAILURES"
+        find "$SHOTS" "$DEBUG" "$APP_DIR/.maestro" "$HOME/.maestro/tests" -name 'storefront-app-*.png' -newer "$SHOTS/.start" -exec mv {} "$OUT/" \; 2>/dev/null || true
         rm -rf "$SHOTS"
+        # Debug output (a screenshot and hierarchy per step) is only worth keeping for a failure.
+        [[ "$PASSED" == true ]] && rm -rf "$DEBUG"
     done
 done
 
-COUNT="$(find "$OUT" -maxdepth 1 -name '*.png' | wc -l | tr -d ' ')"
+if [[ "$PHASE" == build ]]; then
+    echo "==> ${PLATFORM}: APKs in ${APKS#"$ROOT"/}"
+    ls "$APKS" 2>/dev/null || true
+    if [[ -s "$FAILURES" ]]; then
+        cat "$FAILURES"
+        # Nothing to install means nothing to capture; stop before booting an emulator.
+        compgen -G "$APKS/*.apk" >/dev/null || exit 1
+    fi
+    exit 0
+fi
+
+COUNT="$(find "$OUT" -maxdepth 1 -name 'storefront-app-*.png' | wc -l | tr -d ' ')"
 echo "==> ${PLATFORM}: ${COUNT} screenshots in ${OUT#"$ROOT"/}"
 if [[ -s "$FAILURES" ]]; then
     echo "::warning::Some ${PLATFORM} flows failed:"

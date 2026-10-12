@@ -147,7 +147,7 @@ wants anyway.
 - **Determinism:** fixed devices and locale, status bar overrides on both platforms (9:41, full battery), animations off on Android, seeded timestamps. Map tiles still vary slightly; the pixel gate absorbs that. There is no DOM on a phone, so the compare is pixels-only.
 - **Output:** `capture/out/storefront-app/<platform>/*.png`, encoded to lossless WebP by `capture/bin/encode-mobile.mjs` (the existing app screenshots are lossless). Dark is unsuffixed, light is `-light`, names follow [NAMING.md](NAMING.md).
 
-Optional secrets: `GOOGLE_MAPS_API_KEY` (Android map tiles) and `STOREFRONT_STRIPE_TEST_KEY` (a Stripe `pk_test_` key for the checkout screen).
+Optional: `GOOGLE_MAPS_API_KEY` (Android map tiles), and the org's `STRIPE_TEST_KEY` / `STRIPE_TEST_SECRET` (secrets or variables): the seeded Stripe gateways get the test keys and the app is built with the publishable one, so checkout creates a real test payment.
 
 Locally, with a booted simulator and `maestro` installed:
 

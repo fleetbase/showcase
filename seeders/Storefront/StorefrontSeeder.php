@@ -6,6 +6,8 @@ use Database\Seeders\Showcase\Concerns\AnnouncesFixtures;
 use Fleetbase\FleetOps\Models\ServiceArea;
 use Fleetbase\FleetOps\Models\Vehicle;
 use Fleetbase\FleetOps\Models\Zone;
+use Fleetbase\Storefront\Models\Catalog;
+use Fleetbase\Storefront\Models\CatalogSubject;
 use Fleetbase\Storefront\Models\FoodTruck;
 use Fleetbase\Storefront\Models\Network;
 use Fleetbase\Storefront\Models\NotificationChannel;
@@ -66,6 +68,8 @@ class StorefrontSeeder extends Seeder
         // channel is tagged inside `options`.
         $stores = array_filter([$this->seededStore(), $this->seededNetworkStore('rochor-noodle-house')]);
         foreach ($stores as $store) {
+            $truckUuids = FoodTruck::where('store_uuid', $store->uuid)->pluck('uuid')->all();
+            CatalogSubject::whereIn('subject_uuid', $truckUuids)->forceDelete();
             FoodTruck::where('store_uuid', $store->uuid)->forceDelete();
         }
         NotificationChannel::where('options->seed', static::TAG)->forceDelete();
@@ -113,6 +117,9 @@ class StorefrontSeeder extends Seeder
             'status'            => 'active',
         ]);
         FoodTruck::withoutEvents(fn () => $truck->save());
+
+        // A truck sells from its store's catalogs; without one its menu in the app is empty.
+        $truck->setCatalogs(Catalog::where('store_uuid', $store->uuid)->get()->all());
     }
 
     protected function seedNotificationChannel(Store $store): void
