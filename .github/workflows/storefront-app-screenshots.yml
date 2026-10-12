@@ -574,10 +574,18 @@ jobs:
             --release "${{ needs.config.outputs.tag }}"
 
       - uses: actions/upload-artifact@v4
+        id: gallery
         with:
           name: storefront-app-gallery
           path: capture/out/storefront-app-gallery
           retention-days: 30
+
+      - name: Link the gallery
+        run: |
+          {
+            echo ""
+            echo "**[Download the screenshot gallery](${{ steps.gallery.outputs.artifact-url }})**, unzip it and open \`index.html\`."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail the run if any flow stopped early
         run: |
