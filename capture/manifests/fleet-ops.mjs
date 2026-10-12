@@ -665,5 +665,54 @@ export default {
             waitFor: 'main',
             extraSettleMs: 1200,
         },
+
+        // ── Fleet-Ops v0.6.72: customer tracking page ──────────────────────────────────────
+        // The company's tracking-page settings, and the public page itself for FLT-2007 (three
+        // stops, mid-route). The capture session is staff of the owning company, so the page
+        // opens on the full tracked view (map, stops, activity) rather than the coarse status a
+        // stranger sees; the file keeps the published `fleet-ops-order-tracking` name so the docs
+        // pick up the new page in place. Then the same page at phone width, which is how
+        // customers open it, and the company's own page at its seeded slug with no number: the
+        // lookup screen. Tracking numbers come from FleetOpsSeeder::trackingNumberFor (matching
+        // the freeze). `.tp-chip` is on both the tracked and the coarse view, never the skeleton.
+        {
+            id: 'tracking-page-settings',
+            file: 'fleet-ops-tracking-page-settings',
+            url: '/fleet-ops/settings/tracking-page',
+            // The slug field renders once the settings have loaded (not on a load failure).
+            waitFor: '#tracking-page-slug',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            extraSettleMs: 2000,
+        },
+        {
+            id: 'tracking-page',
+            file: 'fleet-ops-order-tracking',
+            fromSeed: true,
+            url: ({ publicId }) => `/~/track/${publicId}`,
+            waitFor: '.tp-root .tp-chip',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'tracking-page-mobile',
+            file: 'fleet-ops-order-tracking-mobile',
+            fromSeed: true,
+            url: ({ publicId }) => `/~/track/${publicId}`,
+            viewport: { width: 390, height: 844 },
+            waitFor: '.tp-root .tp-chip',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'tracking-page-lookup',
+            file: 'fleet-ops-order-tracking-lookup',
+            fromSeed: true,
+            url: ({ publicId }) => `/~/t/${publicId}`,
+            waitFor: '.tp-root #tp-tracking-number',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            extraSettleMs: 1500,
+        },
     ],
 };

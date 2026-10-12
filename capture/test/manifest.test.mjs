@@ -19,11 +19,12 @@ test('entry ids and output filenames are unique', () => {
     assert.equal(new Set(files).size, files.length, 'duplicate output filename');
 });
 
-test('a dynamic url is always paired with a resolve block', () => {
-    // A function url reads publicId, which only resolveAll() can supply. Without the pair the
-    // URL renders as "undefined" and the run captures a 404 page that looks plausible.
+test('a dynamic url is always paired with a resolve block or a seeded id', () => {
+    // A function url reads publicId, which only resolveAll() or the seeders' SEEDED_FIXTURES
+    // (`fromSeed`) can supply. Without one the URL renders as "undefined" and the run captures
+    // a 404 page that looks plausible.
     for (const entry of manifest.entries) {
-        if (typeof entry.url === 'function') {
+        if (typeof entry.url === 'function' && !entry.fromSeed) {
             assert.ok(entry.resolve, `[${entry.id}] has a dynamic url but no resolve block`);
             assert.ok(entry.resolve.resource, `[${entry.id}] resolve is missing a resource`);
             assert.ok(entry.resolve.match?.field, `[${entry.id}] resolve is missing match.field`);

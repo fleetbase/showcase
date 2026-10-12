@@ -18,6 +18,7 @@ import { chromium } from 'playwright';
 import { assertOnboarded, fetchSessionUserId, login } from '../src/auth.mjs';
 import { captureAll } from '../src/capture.mjs';
 import { LAUNCH_ARGS, PLAYWRIGHT_VERSION } from '../src/determinism.mjs';
+import { engineMismatch, fetchEngineVersions } from '../src/engines.mjs';
 import { assertFixturesAgree, resolveAll } from '../src/resolve.mjs';
 import { TileCache } from '../src/tiles.mjs';
 
@@ -94,6 +95,19 @@ async function main() {
             console.error(`::error::--only "${values.only}" matched no entries in ${values.manifest}`);
             process.exit(1);
         }
+    }
+
+    // Entries declare the engine versions they are for (see src/engines.mjs); keep the ones this
+    // release's console serves. An --only id that is gated out is reported, not silently dropped.
+    const engineVersions = await fetchEngineVersions(baseUrl);
+    const gated = entries.map((entry) => [entry, engineMismatch(entry, engineVersions)]);
+    for (const [entry, reason] of gated) {
+        if (reason) console.log(`  skipped ${entry.id}: ${reason}`);
+    }
+    entries = gated.filter(([, reason]) => !reason).map(([entry]) => entry);
+    if (entries.length === 0) {
+        console.log(`No entries in ${values.manifest} apply to this release's engines; nothing to capture.`);
+        return;
     }
 
     console.log(`Capturing ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} x ${manifest.themes.length} theme(s)${mapProvider === 'google' ? ' [Google Maps]' : ''}`);
