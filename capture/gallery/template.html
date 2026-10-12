@@ -1,0 +1,242 @@
+<title>Storefront App Screenshots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a proof sheet. One row per screen, four device frames across
+   (iOS dark, iOS light, Android dark, Android light), grouped by edition. */
+:root {
+    --bg: #f3f4f6;
+    --sheet: #ffffff;
+    --ink: #161a20;
+    --muted: #5d6573;
+    --line: #dde1e7;
+    --frame: #e7eaee;
+    --accent: #2f5bd3;
+    --missing: #b4471f;
+    --missing-soft: #fbeee8;
+    --ok: #1f7a4d;
+    --display: 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #101318; --sheet: #171b22; --ink: #e9ecf1; --muted: #98a1af; --line: #2a303a;
+        --frame: #222833; --accent: #7d9cff; --missing: #f08a62; --missing-soft: #2c1d17; --ok: #5cc994;
+        color-scheme: dark;
+    }
+}
+:root[data-theme="dark"] {
+    --bg: #101318; --sheet: #171b22; --ink: #e9ecf1; --muted: #98a1af; --line: #2a303a;
+    --frame: #222833; --accent: #7d9cff; --missing: #f08a62; --missing-soft: #2c1d17; --ok: #5cc994;
+    color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); padding-inline: 16px; padding-block: 0 64px; }
+.wrap { max-width: 1240px; margin: 0 auto; }
+header.top { padding-block: 32px 20px; display: grid; gap: 14px; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(28px, 4vw, 40px)/1.1 var(--display); margin: 0; text-wrap: balance; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 22px; color: var(--muted); font-size: 14px; }
+.summary b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.summary a { color: var(--accent); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); padding-block: 10px; margin-inline: -16px; padding-inline: 16px; }
+.bar-inner { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.group { display: flex; gap: 4px; align-items: center; }
+.group span { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-right: 4px; }
+.group button { font: 500 13px/1 var(--body); color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+.group button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.group button:focus-visible, .shot:focus-visible, .lb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+nav.jump { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+nav.jump a { color: var(--muted); text-decoration: none; }
+nav.jump a:hover { color: var(--ink); }
+
+details.fail { background: var(--missing-soft); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+details.fail summary { cursor: pointer; font-weight: 600; color: var(--missing); }
+details.fail ul { margin: 8px 0 0; padding-left: 18px; font: 13px/1.6 var(--mono); color: var(--ink); }
+
+section.edition { margin-top: 36px; }
+section.edition > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding-bottom: 10px; border-bottom: 2px solid var(--ink); }
+h2 { font: 700 24px/1.2 var(--display); margin: 0; }
+.ed-note { color: var(--muted); font-size: 14px; flex: 1 1 260px; min-width: 0; }
+.count { font: 500 13px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.count.full { color: var(--ok); }
+
+.cols { display: grid; grid-template-columns: 170px repeat(4, minmax(0, 1fr)); gap: 14px; padding-block: 10px 0; }
+.cols .h { font: 500 11px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.row { display: grid; grid-template-columns: 170px repeat(4, minmax(0, 1fr)); gap: 14px; padding-block: 16px; border-bottom: 1px solid var(--line); align-items: start; }
+.label { min-width: 0; display: grid; gap: 4px; }
+.label strong { font: 600 15px/1.3 var(--body); }
+.label code { font: 12px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.cell { min-width: 0; display: grid; gap: 6px; }
+.cell .tag { font: 500 11px/1 var(--mono); color: var(--muted); display: none; }
+.shot { display: block; width: 100%; padding: 0; border: 0; background: var(--frame); border-radius: 14px; overflow: hidden; cursor: zoom-in; aspect-ratio: 1320 / 2868; max-width: 100%; }
+.shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.gap-frame { aspect-ratio: 1320 / 2868; max-width: 100%; border: 1.5px dashed var(--missing); border-radius: 14px; background: var(--missing-soft); display: grid; place-items: center; text-align: center; color: var(--missing); font: 500 12px/1.4 var(--mono); padding: 8px; }
+
+body.only-ios .cell[data-platform="android"], body.only-ios .cols .h[data-platform="android"],
+body.only-android .cell[data-platform="ios"], body.only-android .cols .h[data-platform="ios"],
+body.only-dark .cell[data-theme="light"], body.only-dark .cols .h[data-theme="light"],
+body.only-light .cell[data-theme="dark"], body.only-light .cols .h[data-theme="dark"] { display: none; }
+body.only-ios .row, body.only-ios .cols, body.only-android .row, body.only-android .cols,
+body.only-dark .row, body.only-dark .cols, body.only-light .row, body.only-light .cols { grid-template-columns: 170px repeat(2, minmax(0, 220px)); }
+body.only-ios.only-dark .row, body.only-ios.only-dark .cols, body.only-ios.only-light .row, body.only-ios.only-light .cols,
+body.only-android.only-dark .row, body.only-android.only-dark .cols, body.only-android.only-light .row, body.only-android.only-light .cols { grid-template-columns: 170px minmax(0, 260px); }
+body.missing-only .row:not(.has-gap) { display: none; }
+
+@media (max-width: 760px) {
+    .cols { display: none; }
+    .row, body[class*="only-"] .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .label { grid-column: 1 / -1; }
+    .cell .tag { display: block; }
+}
+
+.lb { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, #000 82%, transparent); display: grid; grid-template-rows: auto 1fr; padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px); gap: 10px; }
+.lb-head { display: flex; align-items: center; gap: 10px; color: #f1f3f6; min-width: 0; }
+.lb-title { flex: 1; min-width: 0; font: 500 14px/1.3 var(--body); }
+.lb-title code { display: block; font: 12px/1.4 var(--mono); color: #b3bac6; overflow-wrap: anywhere; }
+.lb button { font: 500 14px/1 var(--body); background: #2b313b; color: #f1f3f6; border: 0; border-radius: 999px; padding: 9px 14px; cursor: pointer; }
+.lb-img { min-height: 0; display: grid; place-items: center; }
+.lb-img img { max-height: 100%; max-width: 100%; border-radius: 18px; object-fit: contain; }
+@media (prefers-reduced-motion: no-preference) { .shot img { transition: transform .2s ease; } .shot:hover img { transform: scale(1.015); } }
+</style>
+
+<div class="wrap">
+    <header class="top">
+        <div class="eyebrow" id="eyebrow">showcase · storefront-app-screenshots.yml</div>
+        <h1>Storefront App Screenshots</h1>
+        <div class="summary" id="summary"></div>
+        <div id="fails"></div>
+    </header>
+</div>
+
+<div class="bar">
+    <div class="bar-inner">
+        <div class="group" role="group" aria-label="Platform">
+            <span>Platform</span>
+            <button type="button" id="p-all" data-group="platform" data-value="all" aria-pressed="true">Both</button>
+            <button type="button" id="p-ios" data-group="platform" data-value="ios" aria-pressed="false">iOS</button>
+            <button type="button" id="p-android" data-group="platform" data-value="android" aria-pressed="false">Android</button>
+        </div>
+        <div class="group" role="group" aria-label="Appearance">
+            <span>Appearance</span>
+            <button type="button" id="t-all" data-group="theme" data-value="all" aria-pressed="true">Both</button>
+            <button type="button" id="t-dark" data-group="theme" data-value="dark" aria-pressed="false">Dark</button>
+            <button type="button" id="t-light" data-group="theme" data-value="light" aria-pressed="false">Light</button>
+        </div>
+        <div class="group" role="group" aria-label="Show">
+            <span>Show</span>
+            <button type="button" id="s-all" data-group="show" data-value="all" aria-pressed="true">All screens</button>
+            <button type="button" id="s-missing" data-group="show" data-value="missing" aria-pressed="false">With gaps</button>
+        </div>
+        <nav class="jump" id="jump" aria-label="Editions"></nav>
+    </div>
+</div>
+
+<main class="wrap" id="main"></main>
+
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Screenshot">
+    <div class="lb-head">
+        <div class="lb-title" id="lb-title"></div>
+        <button type="button" id="lb-prev" aria-label="Previous screenshot">←</button>
+        <button type="button" id="lb-next" aria-label="Next screenshot">→</button>
+        <button type="button" id="lb-close">Close</button>
+    </div>
+    <div class="lb-img"><img id="lb-img" alt=""></div>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const PLATFORM = { ios: 'iOS', android: 'Android' };
+const THEME = { dark: 'Dark', light: 'Light' };
+
+const summary = document.getElementById('summary');
+summary.innerHTML = `
+    <div><b>${DATA.captured}</b> of ${DATA.total} captured</div>
+    <div>iOS <b>${DATA.perPlatform.ios}</b></div>
+    <div>Android <b>${DATA.perPlatform.android}</b></div>
+    ${DATA.run ? `<div><a href="https://github.com/fleetbase/showcase/actions/runs/${esc(DATA.run)}">Run ${esc(DATA.run)}</a></div>` : ''}
+    ${DATA.appRef ? `<div>storefront-app <b>${esc(DATA.appRef)}</b></div>` : ''}
+    ${DATA.release ? `<div>Fleetbase <b>${esc(DATA.release)}</b></div>` : ''}`;
+
+const failLines = [...DATA.failures.ios.map((l) => 'iOS · ' + l), ...DATA.failures.android.map((l) => 'Android · ' + l)];
+if (failLines.length) {
+    document.getElementById('fails').innerHTML = `<details class="fail"><summary>${failLines.length} flow${failLines.length === 1 ? '' : 's'} stopped early</summary><ul>${failLines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+}
+
+const gallery = [];
+const main = document.getElementById('main');
+const jump = document.getElementById('jump');
+const heads = `<div class="cols" aria-hidden="true"><div></div>${['ios', 'android'].flatMap((p) => ['dark', 'light'].map((t) => `<div class="h" data-platform="${p}" data-theme="${t}">${PLATFORM[p]} · ${THEME[t]}</div>`)).join('')}</div>`;
+
+for (const section of DATA.sections) {
+    jump.insertAdjacentHTML('beforeend', `<a href="#${section.key}">${esc(section.title)}</a>`);
+    const rows = section.rows.map((row) => {
+        const gap = row.cells.some((c) => !c.src);
+        const cells = row.cells.map((cell) => {
+            const tag = `<span class="tag">${PLATFORM[cell.platform]} · ${THEME[cell.theme]}</span>`;
+            if (!cell.src) return `<div class="cell" data-platform="${cell.platform}" data-theme="${cell.theme}">${tag}<div class="gap-frame">Not captured</div></div>`;
+            const index = gallery.push({ src: cell.src, label: `${section.title} · ${row.label} · ${PLATFORM[cell.platform]} ${THEME[cell.theme].toLowerCase()}`, file: cell.file, platform: cell.platform, theme: cell.theme }) - 1;
+            return `<div class="cell" data-platform="${cell.platform}" data-theme="${cell.theme}">${tag}<button type="button" class="shot" data-index="${index}" aria-label="Open ${esc(row.label)}, ${PLATFORM[cell.platform]} ${THEME[cell.theme].toLowerCase()}"><img loading="lazy" src="${esc(cell.src)}" alt=""></button></div>`;
+        }).join('');
+        return `<div class="row${gap ? ' has-gap' : ''}"><div class="label"><strong>${esc(row.label)}</strong><code>${esc(row.name)}</code></div>${cells}</div>`;
+    }).join('');
+    const full = section.captured === section.total;
+    main.insertAdjacentHTML('beforeend', `<section class="edition" id="${section.key}"><header><h2>${esc(section.title)}</h2><div class="ed-note">${esc(section.note)}</div><div class="count${full ? ' full' : ''}">${section.captured}/${section.total}</div></header>${heads}${rows}</section>`);
+}
+
+const state = { platform: 'all', theme: 'all', show: 'all' };
+function apply() {
+    document.body.classList.toggle('only-ios', state.platform === 'ios');
+    document.body.classList.toggle('only-android', state.platform === 'android');
+    document.body.classList.toggle('only-dark', state.theme === 'dark');
+    document.body.classList.toggle('only-light', state.theme === 'light');
+    document.body.classList.toggle('missing-only', state.show === 'missing');
+    document.querySelectorAll('.group button').forEach((b) => b.setAttribute('aria-pressed', String(state[b.dataset.group] === b.dataset.value)));
+    try { localStorage.setItem('gallery-filters', JSON.stringify(state)); } catch (e) {}
+}
+try { Object.assign(state, JSON.parse(localStorage.getItem('gallery-filters') || '{}')); } catch (e) {}
+document.querySelectorAll('.group button').forEach((b) => b.addEventListener('click', () => { state[b.dataset.group] = b.dataset.value; apply(); }));
+apply();
+
+const lb = document.getElementById('lb');
+const lbImg = document.getElementById('lb-img');
+const lbTitle = document.getElementById('lb-title');
+let current = 0;
+const visible = () => gallery.map((g, i) => i).filter((i) => (state.platform === 'all' || gallery[i].platform === state.platform) && (state.theme === 'all' || gallery[i].theme === state.theme));
+function show(i) {
+    current = i;
+    const g = gallery[i];
+    lbImg.src = g.src;
+    lbImg.alt = g.label;
+    lbTitle.innerHTML = `${esc(g.label)}<code>${esc(g.file)}</code>`;
+}
+function step(d) {
+    const list = visible();
+    const at = list.indexOf(current);
+    show(list[(at + d + list.length) % list.length]);
+}
+let opener = null;
+main.addEventListener('click', (e) => {
+    const b = e.target.closest('.shot');
+    if (!b) return;
+    opener = b;
+    show(Number(b.dataset.index));
+    lb.hidden = false;
+    document.getElementById('lb-close').focus();
+});
+function close() { lb.hidden = true; if (opener) opener.focus(); }
+document.getElementById('lb-close').addEventListener('click', close);
+document.getElementById('lb-prev').addEventListener('click', () => step(-1));
+document.getElementById('lb-next').addEventListener('click', () => step(1));
+lb.addEventListener('click', (e) => { if (e.target === lb || e.target.classList.contains('lb-img')) close(); });
+document.addEventListener('keydown', (e) => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') step(1);
+    if (e.key === 'ArrowLeft') step(-1);
+});
+</script>
