@@ -157,7 +157,7 @@ const V0425 = [
     {
         // The store/network switcher: the sidebar button opens a menu of stores and networks.
         id: 'v-context-switcher',
-        file: 'storefront-context-switcher',
+        file: 'storefront-switcher-menu',
         url: '/storefront',
         waitFor: '[data-test-store-selector-trigger]',
         interact: async (p) => {
@@ -205,7 +205,7 @@ const V0425 = [
     page('v-networks', 'storefront-networks-list', '/storefront/networks'),
     seeded('network-overview', 'storefront-network-details', network(''), { waitFor: '[data-test-network-overview]', extraSettleMs: 2500 }),
     seeded('network-stores', 'storefront-network-stores-list', network('/stores'), { waitFor: NETWORK_PAGE }),
-    seeded('network-stores-approval', 'storefront-network-stores-approval', network('/stores'), {
+    seeded('network-stores-approval', 'storefront-network-stores-list-pending', network('/stores'), {
         waitFor: '[data-test-status-tab="approval"]',
         interact: tab('approval'),
         waitForAfterInteract: '[data-test-status-tab="approval"][aria-selected="true"]',

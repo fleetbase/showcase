@@ -67,11 +67,11 @@ class FleetOpsSeeder extends Seeder
         }
 
         $this->announceFixtures([
-            // Fleet-Ops v0.6.72's public tracking page, for FLT-2007 (three stops, mid-route):
-            // the shared page and the company's own page at its seeded slug.
+            // Fleet-Ops v0.6.72's public tracking page, for FLT-2007 (three stops, mid-route),
+            // and the company's own page at its seeded slug (its lookup screen).
             'tracking-page'         => $trackingNumber,
             'tracking-page-mobile'  => $trackingNumber,
-            'tracking-page-company' => $trackingNumber ? static::TRACKING_SLUG . '/' . $trackingNumber : null,
+            'tracking-page-lookup'  => static::TRACKING_SLUG,
             // Both are resolved independently by the capture through the internal API — by
             // name for the driver, by internal_id for the order. Announcing them here gives
             // that lookup a second source to agree with, so a manifest and a fixture set that
