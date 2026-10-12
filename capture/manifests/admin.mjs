@@ -63,6 +63,8 @@ export default {
         { id: 'two-factor', file: 'admin-two-factor-settings', url: '/admin/two-fa-settings', waitFor: FORM, extraSettleMs: 1200 },
         // platform/system-setup/oauth-sign-in has no screenshot; this is it.
         { id: 'oauth', file: 'admin-oauth-settings', url: '/admin/oauth-settings', waitFor: FORM, extraSettleMs: 1200 },
+        // Fleet-Ops v0.6.72: instance-wide defaults for the customer tracking page.
+        { id: 'tracking-page', file: 'admin-tracking-page-settings', url: '/admin/tracking-page', waitFor: 'main', requires: { 'fleetops-engine': '>=0.6.72' }, extraSettleMs: 1500 },
         {
             id: 'organizations',
             file: 'admin-organizations-list',

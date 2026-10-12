@@ -9,6 +9,7 @@ use Database\Seeders\Showcase\FleetOps\Concerns\ResolvesFleetOpsFixtures;
 use Fleetbase\FleetOps\Models\Driver;
 use Fleetbase\FleetOps\Models\Order;
 use Fleetbase\FleetOps\Models\Trailer;
+use Fleetbase\Models\Company;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 
@@ -58,7 +59,19 @@ class FleetOpsSeeder extends Seeder
 
         $this->call(static::AREAS);
 
+        $company        = $this->prepareCompany();
+        $trackingNumber = null;
+        if ($company) {
+            $this->seedTrackingPage($company);
+            $trackingNumber = $this->trackingNumberFor($company, $this->seededModel(Order::class, 'lm_picked_up_1'));
+        }
+
         $this->announceFixtures([
+            // Fleet-Ops v0.6.72's public tracking page, for FLT-2007 (three stops, mid-route):
+            // the shared page and the company's own page at its seeded slug.
+            'tracking-page'         => $trackingNumber,
+            'tracking-page-mobile'  => $trackingNumber,
+            'tracking-page-company' => $trackingNumber ? static::TRACKING_SLUG . '/' . $trackingNumber : null,
             // Both are resolved independently by the capture through the internal API — by
             // name for the driver, by internal_id for the order. Announcing them here gives
             // that lookup a second source to agree with, so a manifest and a fixture set that
@@ -82,5 +95,56 @@ class FleetOpsSeeder extends Seeder
         foreach (array_reverse(static::AREAS) as $class) {
             (new $class())->purgeSeedData();
         }
+    }
+
+    /** The company tracking page's slug ("fleetbase" itself is reserved). */
+    protected const TRACKING_SLUG = 'fleetbase-sg';
+
+    /**
+     * Fleet-Ops v0.6.72's customer tracking page: the company's own page enabled at a slug, in
+     * its colours, with support contacts — so both the settings screen and the page have
+     * something real to show. Skipped on releases without the feature.
+     */
+    protected function seedTrackingPage(Company $company): void
+    {
+        $config = '\\Fleetbase\\FleetOps\\Support\\TrackingPage\\TrackingPageConfig';
+        if (!class_exists($config)) {
+            return;
+        }
+
+        $settings = $config::sanitize([
+            'org_page' => ['enabled' => true, 'slug' => static::TRACKING_SLUG],
+            'links'    => ['target' => 'org'],
+            'branding' => [
+                'display_name'  => $company->name,
+                'accent'        => '#2563EB',
+                'support_phone' => '+65 6100 0000',
+                'support_email' => 'support@fleetbase.example',
+                'website'       => 'https://fleetbase.io',
+                'powered_by'    => true,
+                'theme'         => 'system',
+                'default_locale' => 'en-us',
+                'locales'       => ['en-us', 'vi-vn', 'fr-fr'],
+            ],
+        ], [], $company->name);
+
+        \Fleetbase\Models\Setting::configure('company.' . $company->uuid . '.' . $config::SETTING_KEY, $settings);
+        \Fleetbase\Models\Setting::configure($config::SLUG_INDEX_PREFIX . static::TRACKING_SLUG, $company->uuid);
+    }
+
+    /**
+     * The tracking number scripts/freeze-timestamps.php gives this order, computed the same way
+     * (company prefix, ten digits from its public id, region): the freeze rewrites tracking
+     * numbers after seeding, so the announced value has to be the one it will write.
+     */
+    protected function trackingNumberFor(Company $company, ?Order $order): ?string
+    {
+        if (!$order?->public_id) {
+            return null;
+        }
+        $region = strtoupper((string) (\Illuminate\Support\Facades\DB::table('tracking_numbers')->where('uuid', $order->tracking_number_uuid)->value('region') ?: 'SG'));
+        $digits = str_pad((string) (hexdec(substr(hash('sha256', 'tracking:' . $order->public_id), 0, 12)) % 10000000000), 10, '0', STR_PAD_LEFT);
+
+        return strtoupper(substr($company->name, 0, 3)) . $digits . $region;
     }
 }

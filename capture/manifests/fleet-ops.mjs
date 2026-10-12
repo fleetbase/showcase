@@ -665,5 +665,50 @@ export default {
             waitFor: 'main',
             extraSettleMs: 1200,
         },
+
+        // ── Fleet-Ops v0.6.72: customer tracking page ──────────────────────────────────────
+        // The company's tracking-page settings, and the public page itself for FLT-2007 (three
+        // stops, mid-route) — the shared /~/track/<number> page, the company's own page at its
+        // seeded slug, and the shared page at phone width, which is how customers open it.
+        // Tracking numbers come from FleetOpsSeeder::trackingNumberFor (matching the freeze).
+        {
+            id: 'tracking-page-settings',
+            file: 'fleet-ops-tracking-page-settings',
+            url: '/fleet-ops/settings/tracking-page',
+            waitFor: 'main',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            extraSettleMs: 2000,
+        },
+        {
+            id: 'tracking-page',
+            file: 'fleet-ops-tracking-page',
+            fromSeed: true,
+            url: ({ publicId }) => `/~/track/${publicId}`,
+            waitFor: '.tp-root',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'tracking-page-company',
+            file: 'fleet-ops-tracking-page-company',
+            fromSeed: true,
+            url: ({ publicId }) => `/~/t/${publicId}`,
+            waitFor: '.tp-root',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
+        {
+            id: 'tracking-page-mobile',
+            file: 'fleet-ops-tracking-page-mobile',
+            fromSeed: true,
+            url: ({ publicId }) => `/~/track/${publicId}`,
+            viewport: { width: 390, height: 844 },
+            waitFor: '.tp-root',
+            requires: { 'fleetops-engine': '>=0.6.72' },
+            map: { settleTiles: true },
+            extraSettleMs: 2500,
+        },
     ],
 };

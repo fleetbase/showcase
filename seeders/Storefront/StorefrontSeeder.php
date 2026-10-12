@@ -12,6 +12,12 @@ use Fleetbase\Storefront\Models\FoodTruck;
 use Fleetbase\Storefront\Models\Network;
 use Fleetbase\Storefront\Models\NotificationChannel;
 use Fleetbase\Storefront\Models\Store;
+use Fleetbase\FleetOps\Models\Contact;
+use Fleetbase\FleetOps\Models\Order;
+use Fleetbase\Models\Invite;
+use Fleetbase\Storefront\Models\Product;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -52,14 +58,22 @@ class StorefrontSeeder extends Seeder
         $memberStore = $this->seededNetworkStore('rochor-noodle-house');
         if ($memberStore) {
             // CEN-02: an online van in the central service area, near the store.
-            $this->seedFoodTruck($memberStore, 'GBB-1010', 'rochor_truck');
+            $this->seedFoodTruck($memberStore, 'GBB-1010', 'rochor_truck', $network);
         }
 
-        $this->announceFixtures(array_filter([
+        if ($network) {
+            $this->seedNetworkMembership($network);
+        }
+        if ($store) {
+            $this->seedCatalogOverrides($store);
+        }
+
+        $orchard = $this->seededNetworkStore('orchard-grocers');
+        $this->announceFixtures(array_filter(array_merge([
             'storefront-store'           => $store?->public_id,
             'network-details'            => $network?->public_id,
             'network-invite-stores'      => $network?->public_id,
-        ]));
+        ], $this->v0425Fixtures($store, $network, $orchard))));
     }
 
     public function purgeSeedData(): void
@@ -73,6 +87,7 @@ class StorefrontSeeder extends Seeder
             FoodTruck::where('store_uuid', $store->uuid)->forceDelete();
         }
         NotificationChannel::where('options->seed', static::TAG)->forceDelete();
+        Invite::where('reason', 'join_storefront_network')->where('meta->seed', static::TAG)->forceDelete();
 
         (new NetworkSeeder())->purgeSeedData();
         (new StoreSeeder())->purgeSeedData();
@@ -93,7 +108,7 @@ class StorefrontSeeder extends Seeder
         return $type . '_' . substr(hash('sha256', static::TAG . ':' . $seedId), 0, 10);
     }
 
-    protected function seedFoodTruck(Store $store, string $plate, string $seedId): void
+    protected function seedFoodTruck(Store $store, string $plate, string $seedId, ?Network $network = null): void
     {
         $vehicle = Vehicle::where('company_uuid', $store->company_uuid)->where('plate_number', $plate)->first();
         $area    = ServiceArea::where('company_uuid', $store->company_uuid)->where('name', 'Singapore Central')->first();
@@ -106,7 +121,7 @@ class StorefrontSeeder extends Seeder
 
         $truck = new FoodTruck();
         $truck->forceFill([
-            'uuid'              => (string) Str::uuid(),
+            'uuid'              => $this->seedUuid('food_truck:' . $seedId),
             'public_id'         => $this->publicId('food_truck', $seedId),
             'company_uuid'      => $store->company_uuid,
             'created_by_uuid'   => $store->created_by_uuid,
@@ -116,6 +131,11 @@ class StorefrontSeeder extends Seeder
             'zone_uuid'         => $zone?->uuid,
             'status'            => 'active',
         ]);
+        // Storefront v0.4.25: a truck can belong to a network, and the network's Trucks page
+        // lists those. The column does not exist before, so it is only set where it does.
+        if ($network && $this->hasStorefrontColumn('food_trucks', 'network_uuid')) {
+            $truck->network_uuid = $network->uuid;
+        }
         FoodTruck::withoutEvents(fn () => $truck->save());
 
         // A truck sells from its store's catalogs; without one its menu in the app is empty.
@@ -138,5 +158,125 @@ class StorefrontSeeder extends Seeder
             'options'         => ['seed' => static::TAG, 'seed_id' => 'fcm_channel'],
         ]);
         NotificationChannel::withoutEvents(fn () => $channel->save());
+    }
+
+    protected function seedUuid(string $seedId): string
+    {
+        $h = hash('sha256', static::TAG . ':uuid:' . $seedId);
+
+        return substr($h, 0, 8) . '-' . substr($h, 8, 4) . '-4' . substr($h, 13, 3) . '-a' . substr($h, 17, 3) . '-' . substr($h, 20, 12);
+    }
+
+    protected function hasStorefrontColumn(string $table, string $column): bool
+    {
+        $connection = config('storefront.connection.db');
+
+        return Schema::connection($connection)->hasTable($table) && Schema::connection($connection)->hasColumn($table, $column);
+    }
+
+    /**
+     * Storefront v0.4.25's network Stores page has status tabs: Active, Offline, Invited,
+     * Suspended and Awaiting approval. Give each a row: Marina Flowers suspended, Bayfront
+     * Pharmacy awaiting approval, and two open invitations (one pending, one declined).
+     * Membership status is a v0.4.25 column; invitations work on any version.
+     */
+    protected function seedNetworkMembership(Network $network): void
+    {
+        if ($this->hasStorefrontColumn('network_stores', 'status')) {
+            $statuses = ['marina-flowers' => 'suspended', 'bayfront-pharmacy' => 'pending'];
+            foreach ($statuses as $key => $status) {
+                if ($member = $this->seededNetworkStore($key)) {
+                    DB::connection(config('storefront.connection.db'))->table('network_stores')
+                        ->where('network_uuid', $network->uuid)->where('store_uuid', $member->uuid)
+                        ->update(['status' => $status]);
+                }
+            }
+        }
+
+        $invitations = [
+            ['hello@kallang-roasters.example', 'Kallang Coffee Roasters', 'pending', 2],
+            ['owner@joo-chiat-bakehouse.example', 'Joo Chiat Bakehouse', 'declined', 6],
+        ];
+        foreach ($invitations as $i => [$email, $storeName, $status, $daysAgo]) {
+            $invite = new Invite();
+            $invite->forceFill([
+                'uuid'            => $this->seedUuid('invite:' . $i),
+                'public_id'       => $this->publicId('invite', 'invite:' . $i),
+                'company_uuid'    => $network->company_uuid,
+                'created_by_uuid' => $network->created_by_uuid,
+                'subject_uuid'    => $network->uuid,
+                'subject_type'    => \Fleetbase\Support\Utils::getMutationType($network),
+                'protocol'        => 'email',
+                'recipients'      => [$email],
+                'reason'          => 'join_storefront_network',
+                'uri'             => substr(hash('sha256', static::TAG . ':invite-uri:' . $i), 0, 12),
+                'code'            => strtoupper(substr(hash('sha256', static::TAG . ':invite-code:' . $i), 0, 6)),
+                'meta'            => ['status' => $status, 'store_name' => $storeName, 'seed' => static::TAG, 'seed_id' => 'invite:' . $i],
+                'created_at'      => \Illuminate\Support\Carbon::parse('2026-01-20 10:00:00', 'Asia/Singapore')->subDays($daysAgo)->utc(),
+                'updated_at'      => \Illuminate\Support\Carbon::parse('2026-01-20 10:00:00', 'Asia/Singapore')->subDays($daysAgo)->utc(),
+            ]);
+            // No expiry: the server derives "expired" from its own clock, which is not the capture's.
+            Invite::withoutEvents(fn () => $invite->save());
+        }
+    }
+
+    /**
+     * Storefront v0.4.25 lets a catalog override a product's price and availability. Give the
+     * store's catalog one of each so the catalog editor shows a catalog price and a product
+     * not sold there. v0.4.25 columns only.
+     */
+    protected function seedCatalogOverrides(Store $store): void
+    {
+        if (!$this->hasStorefrontColumn('catalog_category_products', 'price')) {
+            return;
+        }
+
+        $catalog = Catalog::where('store_uuid', $store->uuid)->orderBy('created_at')->first();
+        if (!$catalog) {
+            return;
+        }
+
+        $overrides = ['iced-latte' => ['price' => 590], 'unavailable-item' => ['is_available' => false]];
+        foreach ($overrides as $productKey => $values) {
+            $product = Product::where('store_uuid', $store->uuid)->where('meta->seed_id', 'product:fleetbase-market:' . $productKey)->first();
+            if (!$product) {
+                continue;
+            }
+            DB::connection(config('storefront.connection.db'))->table('catalog_category_products')
+                ->whereIn('catalog_category_uuid', DB::connection(config('storefront.connection.db'))->table('catalog_categories')->where('catalog_uuid', $catalog->uuid)->pluck('uuid'))
+                ->where('product_uuid', $product->uuid)
+                ->update($values);
+        }
+    }
+
+    /**
+     * Records the v0.4.25 entries open directly (manifest `fromSeed`). The network store page
+     * needs two ids, so its value is the path segment after /networks/.
+     */
+    protected function v0425Fixtures(?Store $store, ?Network $network, ?Store $orchard): array
+    {
+        $fixtures = [];
+        if ($network) {
+            foreach (['network-overview', 'network-stores', 'network-stores-approval', 'network-stores-invite', 'network-orders', 'network-order-create', 'network-trucks', 'network-customers', 'network-categories', 'network-promotions', 'network-campaigns', 'network-segments', 'network-redemptions', 'network-settings'] as $key) {
+                $fixtures[$key] = $network->public_id;
+            }
+            if ($orchard) {
+                $fixtures['network-store-details'] = $network->public_id . '/stores/' . $orchard->public_id;
+            }
+        }
+        if ($store) {
+            $product  = Product::where('store_uuid', $store->uuid)->where('meta->seed_id', 'product:fleetbase-market:orchard-box')->first();
+            $catalog  = Catalog::where('store_uuid', $store->uuid)->orderBy('created_at')->first();
+            $order    = Order::where('meta->storefront_id', $store->public_id)->where('status', 'created')->orderBy('created_at')->first()
+                ?? Order::where('meta->storefront_id', $store->public_id)->orderBy('created_at', 'desc')->first();
+            $customer = $order?->customer_uuid ? Contact::where('uuid', $order->customer_uuid)->first() : null;
+
+            $fixtures['product-details'] = $product?->public_id;
+            $fixtures['catalog-editor']  = $catalog?->public_id;
+            $fixtures['order-details']   = $order?->public_id;
+            $fixtures['customer-details'] = $customer?->public_id;
+        }
+
+        return $fixtures;
     }
 }
