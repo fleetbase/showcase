@@ -98,8 +98,8 @@ instead of the dashboard. `storefront-products-overview` is in the monorepo READ
 | `fleet-ops/fleet-ops-orchestrator-phases.webp` | 2 | ↑ |
 | `fleet-ops/fleet-ops-orchestrator-phase-toggle.webp` | 1 | ↑ |
 | `fleet-ops/fleet-ops-orchestrator-workbench.webp` | 1 | ↑ |
-| `fleet-ops/fleet-ops-order-tracking.webp` | 1 | ↑ |
-| `fleet-ops/fleet-ops-track-order.webp` | 1 | The public order tracking page (outside the console). |
+| `fleet-ops/fleet-ops-order-tracking.webp` | 1 | The public order tracking page. Automated from Fleet-Ops v0.6.72's rebuilt page (`tracking-page`, gated on `fleetops-engine >=0.6.72`); drops off this list on that release's run. |
+| `fleet-ops/fleet-ops-track-order.webp` | 1 | Despite the name, the console's order panel (map plus the Tracking section), not the public page — likely a repoint to an automated order-details capture once one shows the same panel. |
 | `general/console-onboard-account.webp` | 1 | Onboarding wizard — needs a second, unseeded stack (or a fresh user) captured before the Organization seeder runs. |
 | `general/console-onboard-deployment.webp` | 1 | ↑ |
 | `general/console-onboard-trial.webp` | 1 | ↑ |
