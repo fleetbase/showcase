@@ -69,6 +69,18 @@ if [[ "$HTTP_PORT" != "80" ]]; then
     echo "           window.location without the port, so captures will not load data."
 fi
 
+# 38000 sits inside Linux's ephemeral port range (32768-60999), so on a CI runner one of the
+# hundreds of connections the image pull opens can be holding it as its local port just when
+# the proxy binds it ("address already in use", v0.7.69's release run). Take it out of the
+# ephemeral range before pulling, and wait out any connection that already has it.
+if [[ -n "${CI:-}" && "$(uname -s)" == Linux ]] && (( WSS_PORT >= 32768 )); then
+    sudo sysctl -q -w net.ipv4.ip_local_reserved_ports="${WSS_PORT}"
+    for _ in $(seq 60); do
+        [[ -z "$(ss -Htan "sport = :${WSS_PORT}")" ]] && break
+        sleep 2
+    done
+fi
+
 echo "==> Pulling ${RELEASE_TAG}"
 docker compose pull --quiet
 
