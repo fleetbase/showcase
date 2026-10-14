@@ -352,8 +352,13 @@ jobs:
           disable-animations: true
           # Singapore time, like the seeded data and the console capture.
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -timezone Asia/Singapore
-          # Demo mode: a fixed clock, full battery and signal in every status bar.
+          # Demo mode: a fixed clock, full battery and signal in every status bar. Then no system
+          # "isn't responding" dialogs: on v0.7.69's run googlesdksetup hung on the google_apis
+          # image and its dialog covered every attempt of the store edition. Hide error dialogs
+          # and disable that package (absent on other images, hence `|| true`).
           script: |
+            adb shell settings put global hide_error_dialogs 1
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
             adb shell settings put global sysui_demo_allowed 1
             adb shell am broadcast -a com.android.systemui.demo -e command enter
             adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941
