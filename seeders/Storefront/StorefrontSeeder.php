@@ -7,6 +7,7 @@ use Fleetbase\FleetOps\Models\ServiceArea;
 use Fleetbase\FleetOps\Models\Vehicle;
 use Fleetbase\FleetOps\Models\Zone;
 use Fleetbase\Storefront\Models\Catalog;
+use Fleetbase\Storefront\Models\CatalogCategory;
 use Fleetbase\Storefront\Models\CatalogSubject;
 use Fleetbase\Storefront\Models\FoodTruck;
 use Fleetbase\Storefront\Models\Network;
@@ -243,7 +244,8 @@ class StorefrontSeeder extends Seeder
                 continue;
             }
             DB::connection(config('storefront.connection.db'))->table('catalog_category_products')
-                ->whereIn('catalog_category_uuid', DB::connection(config('storefront.connection.db'))->table('catalog_categories')->where('catalog_uuid', $catalog->uuid)->pluck('uuid'))
+                // Catalog categories are core `categories` rows owned by the catalog.
+                ->whereIn('catalog_category_uuid', CatalogCategory::where('owner_uuid', $catalog->uuid)->pluck('uuid'))
                 ->where('product_uuid', $product->uuid)
                 ->update($values);
         }
