@@ -34,12 +34,14 @@ if [[ ${#served[@]} -eq 0 ]]; then
     exit 1
 fi
 
-# Top-level segment of every path the @api matcher claims.
+# Top-level segment of every path the @api matcher claims. Only the first segment of each
+# path counts: /ledger/public/* claims ledger, not public — counting every segment once let
+# Fleet-Ops' /public/* API go unclaimed while this check passed.
 claimed="$(
     # Range ends at the `handle` that consumes the matcher, not at a particular path — an
     # earlier version ended at /uploads/ and silently stopped seeing everything added after it.
     sed -n '/@api path/,/handle @api/p' docker/caddy/Caddyfile \
-        | grep -oE '/[A-Za-z0-9~_-]+' | cut -d/ -f2 | sort -u
+        | grep -oE '(^|[[:space:]])/[^[:space:]\\]*' | tr -d ' \t' | cut -d/ -f2 | grep -v '^$' | sort -u
 )"
 
 fail=0

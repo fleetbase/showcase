@@ -53,12 +53,16 @@
 	# sub-paths are claimed; the bare prefix stays with the console:
 	#   storefront, ledger, customer-portal, ai, valhalla, vroom
 	# API-only prefixes are claimed wholesale:
-	#   int, v1, ~registry, sanctum, health, storage, uploads, opcache-api, stripe, webhooks
+	#   int, v1, public, ~registry, sanctum, health, storage, uploads, opcache-api, stripe,
+	#   webhooks
+	# (`public` is Fleet-Ops' unauthenticated API — the customer tracking page calls
+	# /public/track/* — added with v0.6.72 and missed by the check below until it compared
+	# first segments only.)
 	#
 	# This list was discovered, not guessed. scripts/assert-routes.sh diffed the first draft
 	# against `php artisan route:list` on a real v0.7.57 stack and found valhalla, vroom,
 	# opcache-api, stripe and webhooks missing — five silent misroutes.
-	@api path /int/* /v1/* \
+	@api path /int/* /v1/* /public/* \
  /storefront/int/* /storefront/v1/* \
  /ledger/int/* /ledger/v1/* /ledger/public/* \
  /customer-portal/int/* \
