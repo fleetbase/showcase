@@ -15,7 +15,8 @@ colour. They are not real brands.
 [Unsplash License](https://unsplash.com/license): free for commercial use, no permission or
 attribution required. Unsplash+ photos are excluded. Fetched center-cropped at 1200×675
 (`?w=1200&h=675&fit=crop&crop=entropy&q=78&fm=jpg`). Keep replacements free of legible brands,
-shop signs and recognisable faces.
+shop signs and recognisable faces. `fleetbase-marketplace-backdrop.jpg` is darkened to 60%
+brightness: the network's name and description sit on it in white.
 
 | File | Photo | Photographer |
 |---|---|---|
