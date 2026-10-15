@@ -49,6 +49,7 @@ use Fleetbase\Storefront\Models\StoreHour;
 use Fleetbase\Storefront\Models\StoreLocation;
 use Fleetbase\Storefront\Support\Storefront;
 use Fleetbase\Support\Utils;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -231,6 +232,7 @@ trait SeedsStorefrontFixtures
             ], $definition['options'] ?? []),
             'meta'              => $this->meta($seedId),
         ]);
+        $this->attachStoreImages($company, $store, $storeKey);
 
         $place    = null;
         $location = null;
@@ -268,6 +270,8 @@ trait SeedsStorefrontFixtures
                 }
             }
         }
+
+        $this->attachCategoryImages($categories, $products);
 
         if (!empty($definition['catalog'])) {
             $this->createCatalog($company, $store, $storeKey, $definition['catalog'], $products);
@@ -596,39 +600,91 @@ trait SeedsStorefrontFixtures
 
     /**
      * Showcase: give the product its photo from seeders/Storefront/images/products/<key>.jpg
-     * (royalty-free stock — see the README there). The file is copied onto the public disk,
-     * which the proxy serves at /storage, and becomes the product's primary image. A product
-     * without a photo keeps Storefront's placeholder.
+     * (royalty-free stock — see the README there) as its primary image. A product without a
+     * photo keeps Storefront's placeholder.
      */
     protected function attachProductPhoto(Company $company, Product $product, string $productKey): void
     {
-        $source = dirname(__DIR__) . '/images/products/' . $productKey . '.jpg';
-        if (!is_file($source)) {
+        $file = $this->attachImage($company, $product, 'products/' . $productKey . '.jpg', 'storefront_product', 'product-photo:' . $productKey);
+        if (!$file) {
             return;
         }
-
-        $path = 'showcase/storefront/products/' . $productKey . '.jpg';
-        Storage::disk('public')->put($path, file_get_contents($source));
-
-        $file = $this->createRecord(File::class, [
-            '_key'              => $this->fixtureKey('product-photo:' . $productKey),
-            'public_id'         => 'file_' . substr(hash('sha256', $this->fixtureKey('product-photo:' . $productKey)), 0, 10),
-            'company_uuid'      => $company->uuid,
-            'uploader_uuid'     => session('user'),
-            'subject_uuid'      => $product->uuid,
-            'subject_type'      => Product::class,
-            'disk'              => 'public',
-            'path'              => $path,
-            'original_filename' => $productKey . '.jpg',
-            'content_type'      => 'image/jpeg',
-            'file_size'         => filesize($source),
-            'type'              => 'storefront_product',
-            'meta'              => $this->meta('product-photo:' . $productKey),
-        ], true);
 
         $product->primary_image_uuid = $file->uuid;
         $product->timestamps         = false; // keep the fixture updated_at
         Product::withoutEvents(fn () => $product->save());
+    }
+
+    /**
+     * Showcase: a store's or network's logo and backdrop from seeders/Storefront/images/stores/
+     * (<key>-logo.png, <key>-backdrop.jpg — see the README there). Without them the app and
+     * the console show Storefront's placeholders.
+     */
+    protected function attachStoreImages(Company $company, Store|Network $owner, string $key): void
+    {
+        $logo     = $this->attachImage($company, $owner, 'stores/' . $key . '-logo.png', 'storefront_store_logo', 'store-logo:' . $key);
+        $backdrop = $this->attachImage($company, $owner, 'stores/' . $key . '-backdrop.jpg', 'storefront_store_backdrop', 'store-backdrop:' . $key);
+        if (!$logo && !$backdrop) {
+            return;
+        }
+
+        $owner->logo_uuid     = $logo?->uuid ?? $owner->logo_uuid;
+        $owner->backdrop_uuid = $backdrop?->uuid ?? $owner->backdrop_uuid;
+        $owner->timestamps    = false;
+        $owner::withoutEvents(fn () => $owner->save());
+    }
+
+    /**
+     * Showcase: a store's product categories have no images of their own, so each takes its
+     * first product's photo — the app shows category tiles with images, and placeholders
+     * otherwise.
+     *
+     * @param array<string, Category> $categories
+     * @param array<string, Product>  $products
+     */
+    protected function attachCategoryImages(array $categories, array $products): void
+    {
+        foreach ($categories as $category) {
+            $product = collect($products)->first(fn (Product $product) => $product->category_uuid === $category->uuid && $product->primary_image_uuid);
+            if (!$product || $category->icon_file_uuid) {
+                continue;
+            }
+
+            $category->icon_file_uuid = $product->primary_image_uuid;
+            $category->timestamps     = false;
+            Category::withoutEvents(fn () => $category->save());
+        }
+    }
+
+    /**
+     * Copies seeders/Storefront/images/<relative> onto the public disk (which the proxy serves at
+     * /storage) and records it as a File on the subject. Null when the image does not exist.
+     */
+    protected function attachImage(Company $company, Model $subject, string $relative, string $type, string $seedKey): ?File
+    {
+        $source = dirname(__DIR__) . '/images/' . $relative;
+        if (!is_file($source)) {
+            return null;
+        }
+
+        $path = 'showcase/storefront/' . $relative;
+        Storage::disk('public')->put($path, file_get_contents($source));
+
+        return $this->createRecord(File::class, [
+            '_key'              => $this->fixtureKey($seedKey),
+            'public_id'         => 'file_' . substr(hash('sha256', $this->fixtureKey($seedKey)), 0, 10),
+            'company_uuid'      => $company->uuid,
+            'uploader_uuid'     => session('user'),
+            'subject_uuid'      => $subject->uuid,
+            'subject_type'      => get_class($subject),
+            'disk'              => 'public',
+            'path'              => $path,
+            'original_filename' => basename($relative),
+            'content_type'      => str_ends_with($relative, '.png') ? 'image/png' : 'image/jpeg',
+            'file_size'         => filesize($source),
+            'type'              => $type,
+            'meta'              => $this->meta($seedKey),
+        ], true);
     }
 
     protected function createAddonCategory(Company $company, Store $store, string $storeKey, string $addonKey, array $addonCategory): AddonCategory
@@ -768,6 +824,7 @@ trait SeedsStorefrontFixtures
                 'require_pod'        => true,
             ], $definition['options'] ?? [], $this->meta('network:' . $definition['key'])),
         ]);
+        $this->attachStoreImages($company, $network, $definition['key']);
 
         return $network;
     }

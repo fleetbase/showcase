@@ -71,11 +71,11 @@ class StoreSeeder extends Seeder
         return [
             'key'         => static::STORE_KEY,
             'name'        => 'Fleetbase Market',
-            'description' => 'Neighbourhood grocer used to test the complete Storefront flow: catalog, checkout, payments and delivery.',
+            'description' => 'Neighbourhood grocer for fresh produce, pantry staples and coffee, delivered the same day.',
             'email'       => 'market@example.test',
             'phone'       => '+65 6100 0100',
             'website'     => 'https://example.test/fleetbase-market',
-            'tags'        => ['groceries', 'local', 'testing'],
+            'tags'        => ['groceries', 'local'],
             'currency'    => 'SGD',
             'timezone'    => 'Asia/Singapore',
             'pod_method'  => 'scan',
@@ -199,7 +199,7 @@ class StoreSeeder extends Seeder
                 ],
                 'unavailable-item' => [
                     'name'         => 'Seasonal Mango Crate',
-                    'description'  => 'Out of season. Kept unavailable to test availability handling.',
+                    'description'  => 'Out of season. Back when the harvest arrives.',
                     'price'        => 4200,
                     'category'     => 'produce',
                     'tags'         => ['fruit', 'seasonal'],
@@ -207,7 +207,7 @@ class StoreSeeder extends Seeder
                 ],
                 'draft-item' => [
                     'name'        => 'Weekend Brunch Box',
-                    'description' => 'Unpublished draft product to test status filtering.',
+                    'description' => 'New product being prepared for launch.',
                     'price'       => 3900,
                     'category'    => 'pantry',
                     'status'      => 'draft',
@@ -215,7 +215,7 @@ class StoreSeeder extends Seeder
             ],
             'catalog' => [
                 'name'        => 'Everyday Delivery Catalog',
-                'description' => 'Published catalog containing the products used by Storefront QA.',
+                'description' => 'Our everyday range for delivery and pickup.',
                 'status'      => 'published',
                 'categories'  => [
                     'Fresh Picks' => ['orchard-box', 'market-veg', 'herb-kit'],
