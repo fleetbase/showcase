@@ -352,13 +352,15 @@ jobs:
           disable-animations: true
           # Singapore time, like the seeded data and the console capture.
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -timezone Asia/Singapore
-          # Demo mode: a fixed clock, full battery and signal in every status bar. Then no system
-          # "isn't responding" dialogs: on v0.7.69's run googlesdksetup hung on the google_apis
-          # image and its dialog covered every attempt of the store edition. Hide error dialogs
-          # and disable that package (absent on other images, hence `|| true`).
+          # No system "isn't responding" dialogs: on v0.7.69's run googlesdksetup (the image's
+          # first-boot setup, which also brings up the emulator's Wi-Fi) was slow on 2 cores and
+          # its dialog covered the store edition. Hide error dialogs, and wait for that setup to
+          # finish (provisioned, network connected) instead of disabling it — disabling it left
+          # the device with no network and every flow on "Unable to reach the Fleetbase API".
+          # Then demo mode: a fixed clock, full battery and signal in every status bar.
           script: |
             adb shell settings put global hide_error_dialogs 1
-            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            for i in $(seq 120); do [ "$(adb shell settings get global device_provisioned | tr -d '\r')" = 1 ] && adb shell dumpsys connectivity | grep -q 'state: CONNECTED' && echo "device provisioned and online after $((i * 2))s" && exit 0; sleep 2; done; echo "::warning::emulator not provisioned/online after 240s; capturing anyway"
             adb shell settings put global sysui_demo_allowed 1
             adb shell am broadcast -a com.android.systemui.demo -e command enter
             adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941
