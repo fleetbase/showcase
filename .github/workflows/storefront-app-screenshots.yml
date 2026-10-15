@@ -360,7 +360,7 @@ jobs:
           # Then demo mode: a fixed clock, full battery and signal in every status bar.
           script: |
             adb shell settings put global hide_error_dialogs 1
-            for i in $(seq 120); do [ "$(adb shell settings get global device_provisioned | tr -d '\r')" = 1 ] && adb shell dumpsys connectivity | grep -q 'state: CONNECTED' && echo "device provisioned and online after $((i * 2))s" && exit 0; sleep 2; done; echo "::warning::emulator not provisioned/online after 240s; capturing anyway"
+            for i in $(seq 120); do [ "$(adb shell settings get global device_provisioned | tr -d '\r')" = 1 ] && adb shell dumpsys connectivity | grep -qE 'Active default network: [0-9]' && echo "device provisioned and online after $((i * 2))s" && exit 0; sleep 2; done; echo "::warning::emulator not provisioned/online after 240s; capturing anyway"; echo "device_provisioned=$(adb shell settings get global device_provisioned)"; adb shell dumpsys connectivity | grep -iE 'default network|NetworkAgentInfo' | head -5
             adb shell settings put global sysui_demo_allowed 1
             adb shell am broadcast -a com.android.systemui.demo -e command enter
             adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941
