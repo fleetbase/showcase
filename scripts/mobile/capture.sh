@@ -85,12 +85,12 @@ build_and_install() {
                     -configuration Release -sdk iphonesimulator \
                     -destination 'generic/platform=iOS Simulator' \
                     -derivedDataPath build CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
-                    build >"$log" 2>&1); then
+                    -showBuildTimingSummary build >"$log" 2>&1); then
                     grep -E 'error:|\*\* BUILD FAILED' "$log" | head -n 20
                     tail -n 20 "$log"
                     return 1
                 fi
-                tail -n 3 "$log"
+                sed -n '/Build Timing Summary/,/BUILD SUCCEEDED/p' "$log" | head -n 25
                 local app
                 app="$(find "$APP_DIR/ios/build/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' | head -n1)"
                 rm -rf "$BUILDS/${EDITION}.app"

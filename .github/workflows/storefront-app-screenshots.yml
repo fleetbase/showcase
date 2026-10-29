@@ -326,6 +326,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The native (CMake) half of the build is the same for every edition and between runs
+      # until the app's native dependencies change. The store edition saves the cache.
+      - name: Install ccache
+        run: sudo apt-get install -y -qq ccache >/dev/null && ccache --version | head -n1
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-${{ github.run_id }}
+          restore-keys: ccache-android-
+
       - name: Wait for the stack
         env:
           GH_TOKEN: ${{ github.token }}
@@ -358,12 +369,30 @@ jobs:
 
       # Before the emulator boots: Gradle's native compile next to a running emulator starved
       # the runner until it was shut down.
+      # CMake takes its compiler launcher from these; the NDK is installed afresh on every run,
+      # so ccache compares compilers by content, not mtime.
       - name: Build the APK
+        id: build
         env:
           CAPTURE_PHASE: build
           GOOGLE_MAPS_API_KEY: ${{ secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
-        run: ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CCACHE_DIR: ${{ runner.temp }}/ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_COMPILERCHECK: content
+          CCACHE_MAXSIZE: 2G
+        run: |
+          ccache --zero-stats >/dev/null
+          ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
+          ccache --show-stats
+
+      - uses: actions/cache/save@v4
+        if: matrix.edition == 'store' && steps.build.outcome == 'success'
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-${{ github.run_id }}
 
       # Gradle's and Kotlin's daemons stay resident after the build and hold several GB, which
       # the emulator then runs short of (it froze and the runner was shut down).
@@ -517,8 +546,23 @@ jobs:
             pods-cdn-${{ runner.os }}-
             pods-${{ runner.os }}-
 
+      # React Native's pods compile through ccache when it is installed and USE_CCACHE=1 at
+      # pod install. The store edition saves the cache.
+      - name: Install ccache
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: command -v ccache >/dev/null || brew install --quiet ccache
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-ios-${{ github.run_id }}
+          restore-keys: ccache-ios-
+
       - name: Install pods
         working-directory: app
+        env:
+          USE_CCACHE: '1'
         run: |
           if [[ -x scripts/ci/install-cocoapods.sh ]]; then
             ./scripts/ci/install-cocoapods.sh
@@ -562,10 +606,24 @@ jobs:
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
       - name: Build the app
+        id: build
         env:
           CAPTURE_PHASE: build
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
-        run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
+          CCACHE_DIR: ${{ runner.temp }}/ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_COMPILERCHECK: content
+          CCACHE_MAXSIZE: 2G
+        run: |
+          ccache --zero-stats >/dev/null
+          ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
+          ccache --show-stats
+
+      - uses: actions/cache/save@v4
+        if: matrix.edition == 'store' && steps.build.outcome == 'success'
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-ios-${{ github.run_id }}
 
       - name: Wait for the simulator
         if: hashFiles('capture/out/builds/*.app/Info.plist') != ''
