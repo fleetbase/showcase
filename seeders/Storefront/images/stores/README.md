@@ -26,4 +26,6 @@ brightness: the network's name and description sit on it in white.
 | `tampines-fresh-mart-backdrop.jpg` | [-gOUx23DNks](https://unsplash.com/photos/-gOUx23DNks) | [Jacopo Maiarelli](https://unsplash.com/@ja_ma) |
 | `bayfront-pharmacy-backdrop.jpg` | [PjmNoFo6Y0s](https://unsplash.com/photos/PjmNoFo6Y0s) | [Barnaby Woodrow](https://unsplash.com/@cranky_bear) |
 | `marina-flowers-backdrop.jpg` | [D4Blldtly00](https://unsplash.com/photos/D4Blldtly00) | [Alisa Anton](https://unsplash.com/@alisaanton) |
+| `lion-city-cleaning-backdrop.jpg` | [pQVP5QmskxM](https://unsplash.com/photos/pQVP5QmskxM) | [GoodLifeConstruction](https://unsplash.com/@goodlifeconstruction) |
+| `tiong-bahru-wellness-backdrop.jpg` | [AV0KNliGvQc](https://unsplash.com/photos/AV0KNliGvQc) | [Cherosi](https://unsplash.com/@cherosi) |
 | `fleetbase-marketplace-backdrop.jpg` | [RRC9KMMMneY](https://unsplash.com/photos/RRC9KMMMneY) | [Scribbling Geek](https://unsplash.com/@scribblinggeek) |

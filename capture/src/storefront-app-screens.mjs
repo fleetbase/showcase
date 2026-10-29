@@ -35,6 +35,8 @@ export const STOREFRONT_APP_EDITIONS = [
             ['storefront-app-store-details-network', 'Member store'],
             ['storefront-app-product-details-network', 'Product'],
             ['storefront-app-products-list-network', 'Search results'],
+            ['storefront-app-service-details-network', 'Service'],
+            ['storefront-app-booking-create-network', 'Booking'],
             ['storefront-app-stores-map-network', 'Stores map'],
             ['storefront-app-cart-details-network', 'Cart'],
             ['storefront-app-login-create-network', 'Sign in'],

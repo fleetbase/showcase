@@ -161,6 +161,7 @@ for EDITION in "${EDITIONS[@]}"; do
                 -e "QUALIFIER=${QUALIFIER}" \
                 -e "SEARCH_TAB=${SEARCH_TAB}" \
                 -e "SEARCH_QUERY=${SEARCH_QUERY:-tea}" \
+                -e "SERVICE_QUERY=${SERVICE_QUERY:-massage}" \
                 -e "LATITUDE=${LAT:-1.2834}" \
                 -e "LONGITUDE=${LNG:-103.8607}" \
                 -e "CUSTOMER_PHONE=${PHONE}" \
