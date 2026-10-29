@@ -267,6 +267,8 @@ class NetworkSeeder extends Seeder
                 ],
                 'catalog' => ['name' => 'Marina Flowers Catalog', 'categories' => ['Bouquets' => ['rose-bouquet', 'mixed-bouquet']]],
             ],
+            // The service stores sit farther from the capture customer (Raffles Place) than
+            // Rochor Noodle House, so the app's flows open a store that sells products first.
             [
                 'key'              => 'lion-city-cleaning',
                 'network_category' => 'services',
@@ -277,7 +279,7 @@ class NetworkSeeder extends Seeder
                 'phone'            => '+65 6100 0306',
                 'tags'             => ['services', 'cleaning', 'home'],
                 'gateway'          => 'stripe',
-                'location'         => ['name' => 'Lion City Cleaning', 'street1' => '7 Raffles Place', 'city' => 'Singapore', 'postal_code' => '048616', 'country' => 'SG', 'lat' => 1.2840, 'lng' => 103.8515],
+                'location'         => ['name' => 'Lion City Cleaning', 'street1' => '490 Lorong 6 Toa Payoh', 'city' => 'Singapore', 'postal_code' => '310490', 'country' => 'SG', 'lat' => 1.3326, 'lng' => 103.8474],
                 'hours'            => ['start' => '08:00', 'end' => '20:00', 'closed' => ['sunday']],
                 'categories'       => [
                     'cleaning'  => ['name' => 'Home Cleaning', 'description' => 'Regular and deep cleans.'],
@@ -304,7 +306,7 @@ class NetworkSeeder extends Seeder
                 'phone'            => '+65 6100 0307',
                 'tags'             => ['services', 'salon', 'spa'],
                 'gateway'          => null,
-                'location'         => ['name' => 'Tiong Bahru Wellness', 'street1' => '55 Tiong Bahru Road', 'city' => 'Singapore', 'postal_code' => '160055', 'country' => 'SG', 'lat' => 1.2860, 'lng' => 103.8302],
+                'location'         => ['name' => 'Tiong Bahru Wellness', 'street1' => '302 Tiong Bahru Road', 'city' => 'Singapore', 'postal_code' => '168732', 'country' => 'SG', 'lat' => 1.2865, 'lng' => 103.8270],
                 'hours'            => ['start' => '10:00', 'end' => '21:00', 'closed' => ['monday']],
                 'categories'       => [
                     'hair'    => ['name' => 'Hair', 'description' => 'Cuts and colour.'],

@@ -12,7 +12,9 @@
 // It also opens every store all day, every day. The stack exists only for this capture, and a
 // run can happen at any hour: a store that reads "Closed" at 3am Singapore time can't take an
 // order, so the cart and checkout flows would fail, and the open/closed line would change the
-// screenshots from one run to the next.
+// screenshots from one run to the next. Stores that sell bookable services keep their seeded
+// hours: a booking is for a later day, so it needs no open store now, and all-day hours would
+// offer times from midnight.
 //
 // Prints one MOBILE_FIXTURES={json} line, or MOBILE_FIXTURES_ERROR=<reason>.
 
@@ -36,9 +38,10 @@ try {
         throw new \RuntimeException('API credential "Production Backend" not found; run seed.sh developers');
     }
 
-    $locationUuids = \Fleetbase\Storefront\Models\StoreLocation::whereIn(
+    $bookingStoreUuids = \Fleetbase\Storefront\Models\Product::where('company_uuid', $company->uuid)->where('is_bookable', true)->distinct()->pluck('store_uuid');
+    $locationUuids     = \Fleetbase\Storefront\Models\StoreLocation::whereIn(
         'store_uuid',
-        \Fleetbase\Storefront\Models\Store::where('company_uuid', $company->uuid)->pluck('uuid')
+        \Fleetbase\Storefront\Models\Store::where('company_uuid', $company->uuid)->whereNotIn('uuid', $bookingStoreUuids)->pluck('uuid')
     )->pluck('uuid');
     foreach ($locationUuids as $locationUuid) {
         \Fleetbase\Storefront\Models\StoreHour::where('store_location_uuid', $locationUuid)->forceDelete();
