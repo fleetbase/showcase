@@ -512,7 +512,10 @@ jobs:
             ~/Library/Caches/CocoaPods
             ~/.cocoapods/repos/trunk
           key: pods-cdn-${{ runner.os }}-${{ hashFiles('app/ios/Podfile.lock') }}
-          restore-keys: pods-cdn-${{ runner.os }}-
+          # The caches from before the CDN still hold Pods/, which saves downloading every pod.
+          restore-keys: |
+            pods-cdn-${{ runner.os }}-
+            pods-${{ runner.os }}-
 
       - name: Install pods
         working-directory: app
