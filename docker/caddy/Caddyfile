@@ -51,7 +51,10 @@
 	# matcher is a Caddy config error.
 	# Dual-role prefixes — simultaneously an engine mount and an API prefix. Only the API
 	# sub-paths are claimed; the bare prefix stays with the console:
-	#   storefront, ledger, customer-portal, ai, valhalla, vroom
+	#   storefront, ledger, customer-portal, ai, valhalla, vroom, oauth
+	# (`oauth` is core-api's OAuth provider. /oauth/authorize and /oauth/callback are console
+	# screens, the consent page and Continue-with sign-in, so only the API's own endpoints are
+	# claimed. /.well-known holds its discovery documents.)
 	# API-only prefixes are claimed wholesale:
 	#   int, v1, public, ~registry, sanctum, health, storage, uploads, opcache-api, stripe,
 	#   webhooks
@@ -69,6 +72,8 @@
  /ai/int/* \
  /valhalla/int/* \
  /vroom/int/* \
+ /oauth/token /oauth/revoke /oauth/register /oauth/jwks /oauth/userinfo /oauth/v1/* \
+ /.well-known/* \
  /~registry/* \
  /sanctum/* \
  /health \
