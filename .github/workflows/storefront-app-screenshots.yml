@@ -546,23 +546,8 @@ jobs:
             pods-cdn-${{ runner.os }}-
             pods-${{ runner.os }}-
 
-      # React Native's pods compile through ccache when it is installed and USE_CCACHE=1 at
-      # pod install. The store edition saves the cache.
-      - name: Install ccache
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-        run: command -v ccache >/dev/null || brew install --quiet ccache
-
-      - uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-ios-${{ github.run_id }}
-          restore-keys: ccache-ios-
-
       - name: Install pods
         working-directory: app
-        env:
-          USE_CCACHE: '1'
         run: |
           if [[ -x scripts/ci/install-cocoapods.sh ]]; then
             ./scripts/ci/install-cocoapods.sh
@@ -605,25 +590,13 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
+      # No ccache here: with React Native's ccache wrappers set at pod install (USE_CCACHE=1),
+      # Xcode 26 compiled 1,074 C/Objective-C files without calling ccache once.
       - name: Build the app
-        id: build
         env:
           CAPTURE_PHASE: build
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
-          CCACHE_DIR: ${{ runner.temp }}/ccache
-          CCACHE_BASEDIR: ${{ github.workspace }}
-          CCACHE_COMPILERCHECK: content
-          CCACHE_MAXSIZE: 2G
-        run: |
-          ccache --zero-stats >/dev/null
-          ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
-          ccache --show-stats
-
-      - uses: actions/cache/save@v4
-        if: matrix.edition == 'store' && steps.build.outcome == 'success'
-        with:
-          path: ${{ runner.temp }}/ccache
-          key: ccache-ios-${{ github.run_id }}
+        run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
 
       - name: Wait for the simulator
         if: hashFiles('capture/out/builds/*.app/Info.plist') != ''
