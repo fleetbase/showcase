@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Storefront app for each edition, installs it on the booted simulator (iOS) or
-# emulator (Android) and runs the app's own Maestro screenshot flows in dark and light.
+# emulator (Android) and runs the app's own Maestro screenshot flows in dark and light
+# (CAPTURE_THEMES, e.g. "light" for a light-only run).
 #
 #   ./scripts/mobile/capture.sh <ios|android> <app dir> <https://… stack URL> [editions…]
 #
@@ -8,10 +9,11 @@
 # (screenshots and view hierarchy at each failure) in debug/<edition>-<theme>/. Dark is the default theme
 # and carries no suffix, matching the console naming rule (NAMING.md).
 #
-# CAPTURE_PHASE splits Android in two (default: all):
-#   build  builds every edition's APK into capture/out/apks/ — run BEFORE booting the emulator:
-#          Gradle's native compile next to a running emulator starves a hosted runner
-#   run    installs those APKs and runs the flows
+# CAPTURE_PHASE splits the work in two (default: all):
+#   build  builds every edition's app into capture/out/builds/<edition>.{apk,app}. On Android,
+#          run it BEFORE booting the emulator: Gradle's native compile next to a running
+#          emulator starves a hosted runner. On iOS it needs no simulator.
+#   run    installs those builds and runs the flows
 #
 # Requires: a booted device, maestro on PATH, .mobile-fixtures.json (fixtures.sh), and for the
 # sign-in screens STOREFRONT_BYPASS_VERIFICATION_CODE (the same value the stack was started with).
@@ -31,7 +33,11 @@ APP_ID="com.storefront.app"
 # The iOS driver can take minutes to come up on a cold simulator after a build.
 export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-600000}"
 PHASE="${CAPTURE_PHASE:-all}"
-APKS="${ROOT}/capture/out/apks"
+BUILDS="${ROOT}/capture/out/builds"
+read -r -a THEMES <<<"${CAPTURE_THEMES:-dark light}"
+for THEME in "${THEMES[@]}"; do
+    [[ "$THEME" == dark || "$THEME" == light ]] || { echo "::error::CAPTURE_THEMES: unknown theme ${THEME}" >&2; exit 1; }
+done
 
 OUT="${ROOT}/capture/out/storefront-app/${PLATFORM}"
 FAILURES="${OUT}/failures.txt"
@@ -69,15 +75,31 @@ build_and_install() {
         ios)
             # Release for the simulator: the JS is bundled (Debug loads it from Metro) and no
             # signing is needed. Incremental after the first edition: only the generated env changes.
-            (cd "$APP_DIR/ios" && xcodebuild \
-                -workspace StorefrontApp.xcworkspace -scheme StorefrontApp \
-                -configuration Release -sdk iphonesimulator \
-                -destination "id=${SIMULATOR_ID:?set SIMULATOR_ID}" \
-                -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-                build | tail -n 5)
-            APP_PATH="$(find "$APP_DIR/ios/build/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' | head -n1)"
-            xcrun simctl uninstall "$SIMULATOR_ID" "$APP_ID" >/dev/null 2>&1 || true
-            xcrun simctl install "$SIMULATOR_ID" "$APP_PATH"
+            # Release builds every architecture unless told otherwise; the runners' simulators are
+            # arm64, and x86_64 doubled the build.
+            if [[ "$PHASE" != run ]]; then
+                local log="${BUILDS}/${EDITION}-xcodebuild.log"
+                mkdir -p "$BUILDS"
+                if ! (cd "$APP_DIR/ios" && xcodebuild \
+                    -workspace StorefrontApp.xcworkspace -scheme StorefrontApp \
+                    -configuration Release -sdk iphonesimulator \
+                    -destination 'generic/platform=iOS Simulator' \
+                    -derivedDataPath build CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+                    build >"$log" 2>&1); then
+                    grep -E 'error:|\*\* BUILD FAILED' "$log" | head -n 20
+                    tail -n 20 "$log"
+                    return 1
+                fi
+                tail -n 3 "$log"
+                local app
+                app="$(find "$APP_DIR/ios/build/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' | head -n1)"
+                rm -rf "$BUILDS/${EDITION}.app"
+                cp -R "$app" "$BUILDS/${EDITION}.app" || return 1
+            fi
+            if [[ "$PHASE" != build ]]; then
+                xcrun simctl uninstall "${SIMULATOR_ID:?set SIMULATOR_ID}" "$APP_ID" >/dev/null 2>&1 || true
+                xcrun simctl install "$SIMULATOR_ID" "$BUILDS/${EDITION}.app" || return 1
+            fi
             ;;
         android)
             # Release with the debug keystore when no upload key is configured: bundled JS,
@@ -85,12 +107,12 @@ build_and_install() {
             if [[ "$PHASE" != run ]]; then
                 android_firebase_placeholder
                 (cd "$APP_DIR/android" && ./gradlew --quiet assembleRelease -PreactNativeArchitectures=x86_64) || return 1
-                mkdir -p "$APKS"
-                cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$APKS/${EDITION}.apk" || return 1
+                mkdir -p "$BUILDS"
+                cp "$APP_DIR/android/app/build/outputs/apk/release/app-release.apk" "$BUILDS/${EDITION}.apk" || return 1
             fi
             if [[ "$PHASE" != build ]]; then
                 adb uninstall "$APP_ID" >/dev/null 2>&1 || true
-                adb install -r "$APKS/${EDITION}.apk" || return 1
+                adb install -r "$BUILDS/${EDITION}.apk" || return 1
             fi
             ;;
     esac
@@ -140,7 +162,7 @@ for EDITION in "${EDITIONS[@]}"; do
     LAT="$(fixture "$KIND" latitude)"
     LNG="$(fixture "$KIND" longitude)"
 
-    for THEME in dark light; do
+    for THEME in "${THEMES[@]}"; do
         appearance "$THEME"
         SUFFIX=""
         [[ "$THEME" == light ]] && SUFFIX="-light"
@@ -179,12 +201,12 @@ for EDITION in "${EDITIONS[@]}"; do
 done
 
 if [[ "$PHASE" == build ]]; then
-    echo "==> ${PLATFORM}: APKs in ${APKS#"$ROOT"/}"
-    ls "$APKS" 2>/dev/null || true
+    echo "==> ${PLATFORM}: builds in ${BUILDS#"$ROOT"/}"
+    ls "$BUILDS" 2>/dev/null || true
     if [[ -s "$FAILURES" ]]; then
         cat "$FAILURES"
-        # Nothing to install means nothing to capture; stop before booting an emulator.
-        compgen -G "$APKS/*.apk" >/dev/null || exit 1
+        # Nothing to install means nothing to capture; stop before booting a device.
+        compgen -G "$BUILDS/*.ap[kp]" >/dev/null || exit 1
     fi
     exit 0
 fi

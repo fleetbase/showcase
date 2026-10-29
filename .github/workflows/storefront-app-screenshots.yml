@@ -3,12 +3,15 @@
 # (storefront-app/.maestro/screenshots). Proposes the changed images to fleetbase.io under
 # public/images/screenshots/storefront-app/{ios,android}/.
 #
-# Three jobs run side by side:
+# These jobs run side by side:
 #
 #   stack    ubuntu  boots and seeds the stack behind a public HTTPS tunnel, then stays up
-#                    until both captures are done
-#   android  ubuntu  builds the app against the tunnel and captures on an emulator (KVM)
-#   ios      macOS   builds the app against the tunnel and captures on the simulator
+#                    until every capture is done
+#   android  ubuntu  one per edition: builds the app against the tunnel and captures on an
+#                    emulator (KVM)
+#   ios      macOS   one per edition: builds the app against the tunnel and captures on the
+#                    simulator
+#   gallery  ubuntu  merges the editions' captures into one review page
 #   publish  ubuntu  encodes, compares against fleetbase.io, opens the pull request
 #
 # Android has its own runner: next to the stack (MySQL, three API containers), Gradle and the
@@ -21,7 +24,7 @@
 # Why the jobs talk through artifacts: a job's outputs only reach other jobs once it has
 # finished, and the stack has to stay up while the captures run. The stack uploads
 # `mobile-stack` (URL, keys, sign-in code) as soon as it is ready; each capture job waits for it,
-# and uploads `<platform>-done` when it is finished so the stack can shut down. Everything in it belongs to a stack that no
+# and uploads `done-<platform>-<edition>` when it is finished so the stack can shut down. Everything in it belongs to a stack that no
 # longer exists when the run ends.
 name: Storefront app screenshots
 
@@ -40,6 +43,10 @@ on:
         description: 'Space-separated: ios android'
         required: false
         default: 'ios android'
+      themes:
+        description: 'Space-separated: dark light'
+        required: false
+        default: 'dark light'
       open_pr:
         description: 'Open a pull request on fleetbase.io with the changed screenshots'
         type: boolean
@@ -71,6 +78,8 @@ jobs:
       tag: ${{ steps.cfg.outputs.tag }}
       ios: ${{ steps.cfg.outputs.ios }}
       android: ${{ steps.cfg.outputs.android }}
+      themes: ${{ steps.cfg.outputs.themes }}
+      markers: ${{ steps.cfg.outputs.markers }}
       open_pr: ${{ steps.cfg.outputs.open_pr }}
     steps:
       - id: cfg
@@ -79,11 +88,16 @@ jobs:
           INPUT_APP_REF: ${{ inputs.app_ref }}
           INPUT_TAG: ${{ inputs.release_tag }}
           INPUT_PLATFORMS: ${{ inputs.platforms }}
+          INPUT_THEMES: ${{ inputs.themes }}
         run: |
           set -euo pipefail
           APP_REF="${INPUT_APP_REF:-${DISPATCH_APP_TAG:-main}}"
           TAG="${INPUT_TAG:-latest}"
           PLATFORMS="${INPUT_PLATFORMS:-ios android}"
+          THEMES="${INPUT_THEMES:-dark light}"
+          for theme in $THEMES; do
+            [[ "$theme" == dark || "$theme" == light ]] || { echo "::error::themes: unknown theme $theme"; exit 1; }
+          done
 
           # Same rule as the console run: "latest" becomes the newest vX.Y.Z published for
           # both images, so the artifact and pull request name a real version.
@@ -112,14 +126,26 @@ jobs:
             OPEN_PR=true
           fi
 
+          # The capture jobs' done markers the stack waits for: one per platform and edition
+          # (the editions are the matrix of the android and ios jobs).
+          MARKERS=""
+          for platform in ios android; do
+            [[ " $PLATFORMS " == *" $platform "* ]] || continue
+            for edition in store network food-trucks network-food-trucks; do
+              MARKERS="$MARKERS done-$platform-$edition"
+            done
+          done
+
           {
             echo "app_ref=$APP_REF"
             echo "tag=$TAG"
             echo "ios=$([[ " $PLATFORMS " == *" ios "* ]] && echo true || echo false)"
             echo "android=$([[ " $PLATFORMS " == *" android "* ]] && echo true || echo false)"
+            echo "themes=$THEMES"
+            echo "markers=${MARKERS# }"
             echo "open_pr=$OPEN_PR"
           } >> "$GITHUB_OUTPUT"
-          echo "storefront-app $APP_REF against Fleetbase $TAG ($PLATFORMS, open_pr=$OPEN_PR)"
+          echo "storefront-app $APP_REF against Fleetbase $TAG ($PLATFORMS; $THEMES; open_pr=$OPEN_PR)"
 
   stack:
     name: Stack
@@ -185,7 +211,7 @@ jobs:
           curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "${{ steps.tunnel.outputs.url }}/health" >/dev/null
           echo "Stack reachable at ${{ steps.tunnel.outputs.url }}"
 
-      - name: Share the stack with the iOS job
+      - name: Share the stack with the capture jobs
         run: |
           python3 - <<'PY'
           import json
@@ -209,9 +235,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          wanted=()
-          [[ "${{ needs.config.outputs.ios }}" == "true" ]] && wanted+=(ios-done)
-          [[ "${{ needs.config.outputs.android }}" == "true" ]] && wanted+=(android-done)
+          read -r -a wanted <<<"${{ needs.config.outputs.markers }}"
           deadline=$(( $(date +%s) + 150 * 60 ))
           for marker in "${wanted[@]}"; do
             until gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts[].name' | grep -qx "$marker"; do
@@ -236,12 +260,19 @@ jobs:
           [[ -f .tunnel.pid ]] && kill "$(cat .tunnel.pid)" 2>/dev/null || true
           docker compose down -v || true
 
+  # One job per edition: each builds the app once with that edition's .env and captures it,
+  # side by side with the others. One job doing all four editions in turn took about an hour
+  # on Android and two on iOS.
   android:
-    name: Android
+    name: Android ${{ matrix.edition }}
     needs: config
     if: needs.config.outputs.android == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [store, network, food-trucks, network-food-trucks]
     steps:
       - uses: actions/checkout@v4
 
@@ -261,8 +292,16 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('app/yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
+
       - name: Install app dependencies
         working-directory: app
+        env:
+          YARN_ENABLE_GLOBAL_CACHE: 'true'
         run: |
           corepack enable
           yarn install --immutable || yarn install
@@ -319,12 +358,12 @@ jobs:
 
       # Before the emulator boots: Gradle's native compile next to a running emulator starved
       # the runner until it was shut down.
-      - name: Build the APKs
+      - name: Build the APK
         env:
           CAPTURE_PHASE: build
           GOOGLE_MAPS_API_KEY: ${{ secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
-        run: ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
+        run: ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
 
       # Gradle's and Kotlin's daemons stay resident after the build and hold several GB, which
       # the emulator then runs short of (it froze and the runner was shut down).
@@ -335,9 +374,12 @@ jobs:
           pkill -f GradleDaemon || true
           free -h
 
+      # No APK when the edition was skipped (see capture.sh): nothing to boot an emulator for.
       - name: Capture Android
+        if: hashFiles('capture/out/builds/*.apk') != ''
         uses: reactivecircus/android-emulator-runner@v2
         env:
+          CAPTURE_THEMES: ${{ needs.config.outputs.themes }}
           STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
@@ -367,12 +409,12 @@ jobs:
             adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
             adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
             adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
-            CAPTURE_PHASE=run ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}"
+            CAPTURE_PHASE=run ./scripts/mobile/capture.sh android app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: storefront-app-android
+          name: storefront-app-android-${{ matrix.edition }}
           path: capture/out/storefront-app/android
           if-no-files-found: warn
           retention-days: 14
@@ -380,20 +422,25 @@ jobs:
       # Tells the stack job it can shut down. Uploaded whatever happened above.
       - name: Signal done
         if: always()
-        run: echo done > android-done.txt
+        run: echo 'done' > done.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-done
-          path: android-done.txt
+          name: done-android-${{ matrix.edition }}
+          path: done.txt
           retention-days: 1
 
+  # macos-26, like fleetbase/app-builds, which archives the same app in about six minutes.
   ios:
-    name: iOS
+    name: iOS ${{ matrix.edition }}
     needs: config
     if: needs.config.outputs.ios == 'true'
-    runs-on: macos-15
-    timeout-minutes: 150
+    runs-on: macos-26
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [store, network, food-trucks, network-food-trucks]
     steps:
       - uses: actions/checkout@v4
 
@@ -412,19 +459,60 @@ jobs:
         with:
           node-version: 20
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('app/yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
+
       - name: Install app dependencies
         working-directory: app
+        env:
+          YARN_ENABLE_GLOBAL_CACHE: 'true'
         run: |
           corepack enable
           yarn install --immutable || yarn install
+
+      # The simulator takes the Mac's time zone: Singapore, like the seeded data. Booted now and
+      # waited for after the build. iPhone 16 Pro Max renders 1320×2868, the size of the
+      # existing app screenshots on fleetbase.io; on the newest iOS runtime the runner has.
+      - name: Boot the simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          sudo systemsetup -settimezone Asia/Singapore >/dev/null 2>&1 || true
+          RUNTIME="$(xcrun simctl list runtimes -j | python3 -c "
+          import json, sys
+          r = [x for x in json.load(sys.stdin)['runtimes'] if x['platform'] == 'iOS' and x['isAvailable']]
+          print(max(r, key=lambda x: tuple(int(n) for n in x['version'].split('.')))['identifier'])
+          ")"
+          UDID="$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          match = next((d for d in json.load(sys.stdin)['devices'].get('$RUNTIME', []) if d['name'] == 'iPhone 16 Pro Max'), None)
+          print(match['udid'] if match else '')
+          ")"
+          if [[ -z "$UDID" ]]; then
+            UDID="$(xcrun simctl create 'iPhone 16 Pro Max' com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max "$RUNTIME")"
+          fi
+          echo "iPhone 16 Pro Max on $RUNTIME: $UDID"
+          xcrun simctl boot "$UDID" || true
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      # The Podfile's source is the CocoaPods Specs git repository, which pod install cloned
+      # afresh on every run (nine minutes; the cache below has Pods/, not the spec repo). The CDN
+      # serves the same specs, and only the ones Podfile.lock names are fetched.
+      - name: Use the CocoaPods CDN
+        working-directory: app/ios
+        run: sed -i '' "s#^source 'https://github.com/CocoaPods/Specs.git'#source 'https://cdn.cocoapods.org/'#" Podfile
 
       - uses: actions/cache@v4
         with:
           path: |
             app/ios/Pods
             ~/Library/Caches/CocoaPods
-          key: pods-${{ runner.os }}-${{ hashFiles('app/ios/Podfile.lock') }}
-          restore-keys: pods-${{ runner.os }}-
+            ~/.cocoapods/repos/trunk
+          key: pods-cdn-${{ runner.os }}-${{ hashFiles('app/ios/Podfile.lock') }}
+          restore-keys: pods-cdn-${{ runner.os }}-
 
       - name: Install pods
         working-directory: app
@@ -439,57 +527,6 @@ jobs:
         run: |
           curl -fsSL https://get.maestro.mobile.dev | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-
-      # iPhone 16 Pro Max renders 1320×2868, the size of the existing app screenshots on
-      # fleetbase.io.
-      - name: Boot the simulator
-        id: sim
-        run: |
-          set -euo pipefail
-          # The simulator takes the Mac's time zone: Singapore, like the seeded data.
-          sudo systemsetup -settimezone Asia/Singapore >/dev/null 2>&1 || true
-          UDID="$(xcrun simctl list devices available -j | python3 -c "
-          import json, sys
-          devices = [d for runtime in json.load(sys.stdin)['devices'].values() for d in runtime]
-          match = next((d for d in devices if d['name'] == 'iPhone 16 Pro Max'), None)
-          print(match['udid'] if match else '')
-          ")"
-          if [[ -z "$UDID" ]]; then
-            RUNTIME="$(xcrun simctl list runtimes -j | python3 -c "import json,sys; r=[x for x in json.load(sys.stdin)['runtimes'] if x['platform']=='iOS' and x['isAvailable']]; print(r[-1]['identifier'])")"
-            UDID="$(xcrun simctl create 'iPhone 16 Pro Max' com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max "$RUNTIME")"
-          fi
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 --dataNetwork wifi
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-
-      # Built while the stack is still seeding: the first build is the slow one, and the
-      # flows only need the stack once the app exists. The tunnel URL is not known yet, so this
-      # warms the build cache only; capture.sh rebuilds with the real .env (incrementally).
-      - name: Warm the Release build
-        working-directory: app/ios
-        continue-on-error: true
-        run: |
-          xcodebuild -workspace StorefrontApp.xcworkspace -scheme StorefrontApp \
-            -configuration Release -sdk iphonesimulator \
-            -destination "id=${{ steps.sim.outputs.udid }}" \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 5
-
-      # Maestro's iOS driver (an XCTest runner) has to be built and installed on the simulator
-      # the first time, which took longer than its startup timeout on the first flow of
-      # several runs. Start it once now, while the stack is still seeding.
-      - name: Start the Maestro driver
-        env:
-          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
-        run: |
-          for attempt in 1 2 3; do
-            if maestro --device "${{ steps.sim.outputs.udid }}" hierarchy >/dev/null 2>&1; then
-              echo "Maestro driver ready (attempt ${attempt})"
-              exit 0
-            fi
-            echo "Maestro driver not ready (attempt ${attempt})"
-          done
-          echo "::warning::The Maestro driver did not start; the first flow will try again."
 
       - name: Wait for the stack
         env:
@@ -521,17 +558,52 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Capture iOS
+      - name: Build the app
         env:
+          CAPTURE_PHASE: build
+          STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
+        run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
+
+      - name: Wait for the simulator
+        if: hashFiles('capture/out/builds/*.app/Info.plist') != ''
+        run: |
+          set -euo pipefail
+          UDID="${{ steps.sim.outputs.udid }}"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 --dataNetwork wifi
+
+      # Maestro's iOS driver (an XCTest runner) has to be built and installed on the simulator
+      # the first time, which took longer than its startup timeout on the first flow of
+      # several runs. Start it once before the flows.
+      - name: Start the Maestro driver
+        if: hashFiles('capture/out/builds/*.app/Info.plist') != ''
+        env:
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
+        run: |
+          for attempt in 1 2 3; do
+            if maestro --device "${{ steps.sim.outputs.udid }}" hierarchy >/dev/null 2>&1; then
+              echo "Maestro driver ready (attempt ${attempt})"
+              exit 0
+            fi
+            echo "Maestro driver not ready (attempt ${attempt})"
+          done
+          echo "::warning::The Maestro driver did not start; the first flow will try again."
+
+      # No app when the edition was skipped (see capture.sh).
+      - name: Capture iOS
+        if: hashFiles('capture/out/builds/*.app/Info.plist') != ''
+        env:
+          CAPTURE_PHASE: run
+          CAPTURE_THEMES: ${{ needs.config.outputs.themes }}
           SIMULATOR_ID: ${{ steps.sim.outputs.udid }}
           STOREFRONT_BYPASS_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
           STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY || vars.STRIPE_TEST_KEY }}
-        run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}"
+        run: ./scripts/mobile/capture.sh ios app "${{ steps.stack.outputs.url }}" "${{ matrix.edition }}"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: storefront-app-ios
+          name: storefront-app-ios-${{ matrix.edition }}
           path: capture/out/storefront-app/ios
           if-no-files-found: warn
           retention-days: 14
@@ -539,12 +611,12 @@ jobs:
       # Tells the stack job it can shut down. Uploaded whatever happened above.
       - name: Signal done
         if: always()
-        run: echo done > ios-done.txt
+        run: echo 'done' > done.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ios-done
-          path: ios-done.txt
+          name: done-ios-${{ matrix.edition }}
+          path: done.txt
           retention-days: 1
 
   # A review page for every run, PR or not: download `storefront-app-gallery` and open
@@ -569,6 +641,9 @@ jobs:
         with:
           pattern: storefront-app-*
           path: capture/out/raw
+
+      - name: Merge the editions
+        run: ./scripts/mobile/merge-captures.sh capture/out/raw
 
       - name: Build the gallery
         run: |
@@ -627,6 +702,9 @@ jobs:
         with:
           pattern: storefront-app-*
           path: capture/out/raw
+
+      - name: Merge the editions
+        run: ./scripts/mobile/merge-captures.sh capture/out/raw
 
       - name: Checkout fleetbase.io
         uses: actions/checkout@v4
