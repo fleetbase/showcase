@@ -1,0 +1,89 @@
+# Publishes the Storefront app screenshot gallery (the `storefront-app-gallery` artifact) to
+# GitHub Pages, at https://fleetbase.github.io/showcase/storefront-app/.
+#
+# Runs after every Storefront app screenshots run on main, whatever its outcome: a run with
+# failed flows still has a gallery, with the gaps marked and the failures listed. Run it by hand
+# with a run id to publish an earlier run's gallery again (artifacts are kept 30 days).
+name: Publish gallery
+
+on:
+  workflow_run:
+    workflows: [Storefront app screenshots]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Storefront app screenshots run whose gallery to publish'
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}storefront-app/
+    steps:
+      # A run that stopped before its gallery job (a failed stack, say) has nothing to publish.
+      - name: Find the gallery
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          if gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | select(.expired | not) | .name' | grep -qx 'storefront-app-gallery'; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Run $RUN_ID has no storefront-app-gallery artifact; nothing to publish."
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.find.outputs.found == 'true'
+        with:
+          name: storefront-app-gallery
+          path: site/storefront-app
+          run-id: ${{ steps.find.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Landing page
+        if: steps.find.outputs.found == 'true'
+        run: |
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Fleetbase Showcase</title>
+          <meta http-equiv="refresh" content="0; url=storefront-app/">
+          </head>
+          <body>
+          <p><a href="storefront-app/">Storefront app screenshots</a> ·
+          <a href="https://github.com/fleetbase/showcase">fleetbase/showcase</a></p>
+          </body>
+          </html>
+          HTML
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.find.outputs.found == 'true'
+        with:
+          path: site
+
+      - id: deploy
+        if: steps.find.outputs.found == 'true'
+        uses: actions/deploy-pages@v4
