@@ -1,0 +1,141 @@
+<title>Fleetbase Console Screenshots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!--STYLE-->
+<style>
+/* The console's layout over the shared stylesheet: one row per screen, dark and light across,
+   grouped by area. Desktop frames, so two wide columns instead of four phones. */
+.cols, .row { grid-template-columns: 170px repeat(2, minmax(0, 1fr)); }
+body.only-dark .row, body.only-dark .cols, body.only-light .row, body.only-light .cols { grid-template-columns: 170px minmax(0, 760px); }
+.shot, .gap-frame { aspect-ratio: 1440 / 900; border-radius: 8px; }
+.lb-img img { border-radius: 8px; }
+@media (max-width: 760px) {
+    .row, body[class*="only-"] .row { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="wrap">
+    <header class="top">
+        <div class="eyebrow">showcase · screenshots.yml</div>
+        <h1>Console Screenshots</h1>
+        <div class="summary" id="summary"></div>
+        <div id="fails"></div>
+    </header>
+</div>
+
+<div class="bar">
+    <div class="bar-inner">
+        <div class="group" role="group" aria-label="Appearance">
+            <span>Appearance</span>
+            <button type="button" data-group="theme" data-value="all" aria-pressed="true">Both</button>
+            <button type="button" data-group="theme" data-value="dark" aria-pressed="false">Dark</button>
+            <button type="button" data-group="theme" data-value="light" aria-pressed="false">Light</button>
+        </div>
+        <div class="group" role="group" aria-label="Show">
+            <span>Show</span>
+            <button type="button" data-group="show" data-value="all" aria-pressed="true">All screens</button>
+            <button type="button" data-group="show" data-value="missing" aria-pressed="false">With gaps</button>
+        </div>
+        <nav class="jump" id="jump" aria-label="Areas"></nav>
+    </div>
+</div>
+
+<main class="wrap" id="main"></main>
+
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Screenshot">
+    <div class="lb-head">
+        <div class="lb-title" id="lb-title"></div>
+        <button type="button" id="lb-prev" aria-label="Previous screenshot">←</button>
+        <button type="button" id="lb-next" aria-label="Next screenshot">→</button>
+        <button type="button" id="lb-close">Close</button>
+    </div>
+    <div class="lb-img"><img id="lb-img" alt=""></div>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const THEME = { dark: 'Dark', light: 'Light' };
+
+document.getElementById('summary').innerHTML = `
+    <div><b>${DATA.captured}</b> of ${DATA.total} captured</div>
+    <div><b>${DATA.sections.length}</b> areas</div>
+    ${DATA.run ? `<div><a href="https://github.com/fleetbase/showcase/actions/runs/${esc(DATA.run)}">Run ${esc(DATA.run)}</a></div>` : ''}
+    ${DATA.release ? `<div>Fleetbase <b>${esc(DATA.release)}</b></div>` : ''}`;
+
+if (DATA.failures.length) {
+    document.getElementById('fails').innerHTML = `<details class="fail"><summary>${DATA.failures.length} screen${DATA.failures.length === 1 ? '' : 's'} failed to capture</summary><ul>${DATA.failures.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>`;
+}
+
+const gallery = [];
+const main = document.getElementById('main');
+const jump = document.getElementById('jump');
+const heads = `<div class="cols" aria-hidden="true"><div></div>${['dark', 'light'].map((t) => `<div class="h" data-theme="${t}">${THEME[t]}</div>`).join('')}</div>`;
+
+for (const section of DATA.sections) {
+    jump.insertAdjacentHTML('beforeend', `<a href="#${section.key}">${esc(section.title)}</a>`);
+    const rows = section.rows.map((row) => {
+        const gap = row.cells.some((c) => !c.src);
+        const cells = row.cells.map((cell) => {
+            const tag = `<span class="tag">${THEME[cell.theme]}</span>`;
+            if (!cell.src) return `<div class="cell" data-theme="${cell.theme}">${tag}<div class="gap-frame">Not captured</div></div>`;
+            const index = gallery.push({ src: cell.src, label: `${section.title} · ${row.label} · ${THEME[cell.theme].toLowerCase()}`, file: cell.file, theme: cell.theme }) - 1;
+            return `<div class="cell" data-theme="${cell.theme}">${tag}<button type="button" class="shot" data-index="${index}" aria-label="Open ${esc(row.label)}, ${THEME[cell.theme].toLowerCase()}"><img loading="lazy" src="${esc(cell.src)}" alt=""></button></div>`;
+        }).join('');
+        return `<div class="row${gap ? ' has-gap' : ''}"><div class="label"><strong>${esc(row.label)}</strong><code>${esc(row.name)}</code></div>${cells}</div>`;
+    }).join('');
+    const full = section.captured === section.total;
+    main.insertAdjacentHTML('beforeend', `<section class="edition" id="${section.key}"><header><h2>${esc(section.title)}</h2><div class="ed-note"></div><div class="count${full ? ' full' : ''}">${section.captured}/${section.total}</div></header>${heads}${rows}</section>`);
+}
+
+const state = { theme: 'all', show: 'all' };
+function apply() {
+    document.body.classList.toggle('only-dark', state.theme === 'dark');
+    document.body.classList.toggle('only-light', state.theme === 'light');
+    document.body.classList.toggle('missing-only', state.show === 'missing');
+    document.querySelectorAll('.group button').forEach((b) => b.setAttribute('aria-pressed', String(state[b.dataset.group] === b.dataset.value)));
+    try { localStorage.setItem('console-gallery-filters', JSON.stringify(state)); } catch (e) {}
+}
+try { Object.assign(state, JSON.parse(localStorage.getItem('console-gallery-filters') || '{}')); } catch (e) {}
+document.querySelectorAll('.group button').forEach((b) => b.addEventListener('click', () => { state[b.dataset.group] = b.dataset.value; apply(); }));
+apply();
+
+const lb = document.getElementById('lb');
+const lbImg = document.getElementById('lb-img');
+const lbTitle = document.getElementById('lb-title');
+let current = 0;
+const visible = () => gallery.map((g, i) => i).filter((i) => state.theme === 'all' || gallery[i].theme === state.theme);
+function show(i) {
+    current = i;
+    const g = gallery[i];
+    lbImg.src = g.src;
+    lbImg.alt = g.label;
+    lbTitle.innerHTML = `${esc(g.label)}<code>${esc(g.file)}</code>`;
+}
+function step(d) {
+    const list = visible();
+    const at = list.indexOf(current);
+    show(list[(at + d + list.length) % list.length]);
+}
+let opener = null;
+main.addEventListener('click', (e) => {
+    const b = e.target.closest('.shot');
+    if (!b) return;
+    opener = b;
+    show(Number(b.dataset.index));
+    lb.hidden = false;
+    document.getElementById('lb-close').focus();
+});
+function close() { lb.hidden = true; if (opener) opener.focus(); }
+document.getElementById('lb-close').addEventListener('click', close);
+document.getElementById('lb-prev').addEventListener('click', () => step(-1));
+document.getElementById('lb-next').addEventListener('click', () => step(1));
+lb.addEventListener('click', (e) => { if (e.target === lb || e.target.classList.contains('lb-img')) close(); });
+document.addEventListener('keydown', (e) => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') step(1);
+    if (e.key === 'ArrowLeft') step(-1);
+});
+</script>

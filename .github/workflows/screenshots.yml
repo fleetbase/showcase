@@ -320,3 +320,47 @@ jobs:
         run: |
           echo "::error::The capture step reported failures; see the log and the debug HTML in the artifact."
           exit 1
+
+  # A review page for every run: the `console-gallery` artifact (unzip it and open index.html),
+  # which publish-gallery.yml also puts on GitHub Pages for runs on main.
+  gallery:
+    name: Gallery
+    needs: capture
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install capture dependencies
+        working-directory: capture
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: console-screenshots-*
+          path: capture/out/raw
+
+      - name: Build the gallery
+        run: |
+          set -euo pipefail
+          dir="$(find capture/out/raw -mindepth 1 -maxdepth 1 -type d -name 'console-screenshots-*' | head -n1)"
+          if [[ -z "$dir" ]]; then
+            echo "::warning::No console-screenshots artifact in this run; no gallery."
+            exit 0
+          fi
+          node capture/bin/gallery-console.mjs \
+            --in "$dir" \
+            --out capture/out/console-gallery \
+            --run "${{ github.run_id }}" \
+            --release "${dir##*/console-screenshots-}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: console-gallery
+          path: capture/out/console-gallery
+          if-no-files-found: ignore
+          retention-days: 90

@@ -707,7 +707,7 @@ jobs:
         with:
           name: storefront-app-gallery
           path: capture/out/storefront-app-gallery
-          retention-days: 30
+          retention-days: 90
 
       - name: Link the gallery
         run: |

@@ -22,6 +22,8 @@
   <a href="https://www.fleetbase.io/docs">Documentation</a>
   ·
   <a href="https://github.com/fleetbase/storefront-app">Storefront app</a>
+  ·
+  <a href="https://fleetbase.github.io/showcase/">Latest screenshots</a>
 </p>
 
 ---
@@ -42,6 +44,10 @@ automate. It is not a supported product, and most people will want
 - **Fictional, deterministic data:** fixed names, places and timestamps (a logistics company in Singapore), with no Faker and no random ids, so two runs produce the same pixels.
 - **Two gates before publishing:** a DOM hash and a pixel comparison, so a pull request only carries screens that really changed.
 - **Dark and light:** every screen in both themes, named by one rule ([NAMING.md](NAMING.md)).
+
+**Browse the latest screenshots:** [the console](https://fleetbase.github.io/showcase/console/),
+area by area, and [the Storefront app](https://fleetbase.github.io/showcase/storefront-app/) on
+iOS and Android, each in dark and light and from the most recent run.
 
 ## How it works
 
@@ -99,6 +105,10 @@ inside, 6 of 8 files were byte-identical across two runs; with this order, 8 of 
 | --- | --- | --- |
 | [Console Screenshots](.github/workflows/screenshots.yml) | Captures the console areas you choose (`iam`, `fleet-ops`, `admin`, `general`, `developers`, `ledger`, `extensions`, `storefront`) and uploads them as an artifact. | Fleetbase release (`repository_dispatch: fleetbase-release`) or by hand |
 | [Storefront app screenshots](.github/workflows/storefront-app-screenshots.yml) | Captures the Storefront app on iOS and Android, per edition, in dark and light, and uploads a review gallery. | Storefront app release (`repository_dispatch: storefront-app-release`) or by hand |
+
+Each run also uploads a review gallery (`console-gallery`, `storefront-app-gallery`), and
+[Publish gallery](.github/workflows/publish-gallery.yml) puts the newest of each from main on
+[GitHub Pages](https://fleetbase.github.io/showcase/).
 
 Both open a pull request on fleetbase.io only when asked to: the `open_pr` input, or
 `OPEN_PR_ON_RELEASE=true` for release runs. A plain run only produces images to look at.
@@ -186,7 +196,7 @@ places are real Singapore locations.
 - **What the app is built with:** `scripts/mobile/fixtures.sh` reads the seeded store and network keys, the SDK key, the store and food-truck coordinates and the review customer from the database (`scripts/mobile-fixtures.php`), and `scripts/mobile/app-env.sh` writes the app's `.env` per edition: store, network, food trucks and a Network's food trucks (`HOME_SCREEN=foodTrucks` with the store or network key). For the trucks homes the customer is placed inside the truck's zone. Besides the store's truck, the Storefront seeder gives the network member store Rochor Noodle House a truck (van GBB-1010), so the Network edition has trucks too. Each edition is its own Release build, because the values are compiled in, which is why each edition gets a job of its own. iOS builds arm64 only, and CocoaPods resolves through its CDN instead of cloning the Specs repository the app's Podfile names.
 - **Signing in:** the real flow, with Storefront's review-account bypass. Each run generates a code, starts the stack with `STOREFRONT_BYPASS_VERIFICATION_CODE` and `STOREFRONT_REVIEW_ACCOUNTS=+6591000201` (the seeded customer Ava Chen, who has order history and an order in progress at the store and in the Network, so both editions capture account, orders and checkout), and passes both to the flow.
 - **Determinism:** fixed devices and locale, status bar overrides on both platforms (9:41, full battery), animations off on Android, seeded timestamps. Map tiles still vary slightly; the pixel gate absorbs that. There is no DOM on a phone, so the compare is pixels-only.
-- **Review:** every run uploads `storefront-app-gallery`: unzip it and open `index.html` for every expected screen side by side (iOS and Android, dark and light), with gaps marked and failed flows listed (`capture/bin/gallery-mobile.mjs`, screen list in `capture/src/storefront-app-screens.mjs`). A run goes red when any flow stopped early.
+- **Review:** every run uploads `storefront-app-gallery`, and runs on main publish it to [GitHub Pages](https://fleetbase.github.io/showcase/storefront-app/) (`.github/workflows/publish-gallery.yml`). It shows every expected screen side by side (iOS and Android, dark and light), with gaps marked and failed flows listed (`capture/bin/gallery-mobile.mjs`, screen list in `capture/src/storefront-app-screens.mjs`). A run goes red when any flow stopped early.
 - **Output:** `capture/out/storefront-app/<platform>/*.png`, encoded to lossless WebP by `capture/bin/encode-mobile.mjs` (the existing app screenshots are lossless). Dark is unsuffixed, light is `-light`, names follow [NAMING.md](NAMING.md).
 
 Optional secrets: `STOREFRONT_APP_GOOGLE_MAPS_API_KEY` (Android map tiles: a key with the Maps SDK for Android enabled for package `com.storefront.app` and the React Native debug signing SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`; falls back to `GOOGLE_MAPS_API_KEY`), and the org's `STRIPE_TEST_KEY` / `STRIPE_TEST_SECRET` (secrets or variables): the seeded Stripe gateways get the test keys and the app is built with the publishable one, so checkout creates a real test payment.
