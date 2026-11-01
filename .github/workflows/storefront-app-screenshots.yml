@@ -23,7 +23,9 @@
 #
 # Why the jobs talk through artifacts: a job's outputs only reach other jobs once it has
 # finished, and the stack has to stay up while the captures run. The stack uploads
-# `mobile-stack` (URL, keys, sign-in code) as soon as it is ready; each capture job waits for it,
+# `mobile-stack` (URL, keys, sign-in code, encrypted with SHOWCASE_PASSWORD and the run id:
+# anyone signed in to GitHub can download a public repository's artifacts) as soon as it is
+# ready; each capture job waits for it,
 # and uploads `done-<platform>-<edition>` when it is finished so the stack can shut down. Everything in it belongs to a stack that no
 # longer exists when the run ends.
 name: Storefront app screenshots
@@ -212,7 +214,10 @@ jobs:
           echo "Stack reachable at ${{ steps.tunnel.outputs.url }}"
 
       - name: Share the stack with the capture jobs
+        env:
+          STACK_KEY: ${{ secrets.SHOWCASE_PASSWORD }}-${{ github.run_id }}
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           import json
           fixtures = json.load(open('.mobile-fixtures.json'))
@@ -222,11 +227,13 @@ jobs:
               'fixtures': fixtures,
           }, open('mobile-stack.json', 'w'))
           PY
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:STACK_KEY -in mobile-stack.json -out mobile-stack.json.enc
+          rm mobile-stack.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: mobile-stack
-          path: mobile-stack.json
+          path: mobile-stack.json.enc
           retention-days: 1
 
       # ── Keep serving until the captures are done ─────────────────────────────────────────
@@ -358,8 +365,11 @@ jobs:
 
       - name: Read the stack
         id: stack
+        env:
+          STACK_KEY: ${{ secrets.SHOWCASE_PASSWORD }}-${{ github.run_id }}
         run: |
           set -euo pipefail
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:STACK_KEY -in mobile-stack.json.enc -out mobile-stack.json
           URL="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['url'])")"
           CODE="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['code'])")"
           echo "::add-mask::$CODE"
@@ -581,8 +591,11 @@ jobs:
 
       - name: Read the stack
         id: stack
+        env:
+          STACK_KEY: ${{ secrets.SHOWCASE_PASSWORD }}-${{ github.run_id }}
         run: |
           set -euo pipefail
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:STACK_KEY -in mobile-stack.json.enc -out mobile-stack.json
           URL="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['url'])")"
           CODE="$(python3 -c "import json; print(json.load(open('mobile-stack.json'))['code'])")"
           echo "::add-mask::$CODE"
