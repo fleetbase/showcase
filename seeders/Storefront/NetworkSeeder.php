@@ -126,6 +126,7 @@ class NetworkSeeder extends Seeder
             'groceries'   => ['name' => 'Groceries', 'description' => 'Supermarkets and fresh food.', 'icon' => 'basket-shopping', 'icon_color' => '#16a34a', 'tags' => ['food', 'fresh']],
             'restaurants' => ['name' => 'Restaurants', 'description' => 'Prepared meals for delivery and pickup.', 'icon' => 'utensils', 'icon_color' => '#ea580c', 'tags' => ['food', 'meals']],
             'health'      => ['name' => 'Health & Beauty', 'description' => 'Pharmacies and personal care.', 'icon' => 'heart-pulse', 'icon_color' => '#2563eb', 'tags' => ['pharmacy']],
+            'services'    => ['name' => 'Home & Wellness', 'description' => 'Book cleaners, stylists and therapists.', 'icon' => 'calendar-check', 'icon_color' => '#7c3aed', 'tags' => ['services']],
         ];
     }
 
@@ -266,14 +267,68 @@ class NetworkSeeder extends Seeder
                 ],
                 'catalog' => ['name' => 'Marina Flowers Catalog', 'categories' => ['Bouquets' => ['rose-bouquet', 'mixed-bouquet']]],
             ],
+            // The service stores sit farther from the capture customer (Raffles Place) than
+            // Rochor Noodle House, so the app's flows open a store that sells products first.
+            [
+                'key'              => 'lion-city-cleaning',
+                'network_category' => 'services',
+                'order_count'      => 0,
+                'name'             => 'Lion City Cleaning',
+                'description'      => 'Home cleaning by vetted cleaners. Book a date and start time.',
+                'email'            => 'cleaning@example.test',
+                'phone'            => '+65 6100 0306',
+                'tags'             => ['services', 'cleaning', 'home'],
+                'gateway'          => 'stripe',
+                'location'         => ['name' => 'Lion City Cleaning', 'street1' => '490 Lorong 6 Toa Payoh', 'city' => 'Singapore', 'postal_code' => '310490', 'country' => 'SG', 'lat' => 1.3326, 'lng' => 103.8474],
+                'hours'            => ['start' => '08:00', 'end' => '20:00', 'closed' => ['sunday']],
+                'categories'       => [
+                    'cleaning'  => ['name' => 'Home Cleaning', 'description' => 'Regular and deep cleans.'],
+                    'specialty' => ['name' => 'Specialty', 'description' => 'Appliances, windows and upholstery.'],
+                ],
+                'addon_categories' => [
+                    'extras' => ['name' => 'Extras', 'description' => 'Add to your clean.', 'max_selectable' => 3, 'is_required' => false, 'addons' => [['Inside the Fridge', 'Empty, wipe and restock.', 1500], ['Inside the Oven', 'Degrease racks and walls.', 2000], ['Ironing (1 hour)', 'Shirts and linens.', 2500]]],
+                ],
+                'products' => [
+                    'standard-clean' => ['name' => 'Standard Home Clean', 'description' => 'Dusting, floors, kitchen and bathrooms.', 'price' => 6500, 'category' => 'cleaning', 'tags' => ['cleaning'], 'recommended' => true, 'is_service' => true, 'is_bookable' => true, 'can_pickup' => false, 'meta' => ['service' => ['duration_minutes' => 180]], 'variants' => [['name' => 'Home Size', 'required' => true, 'multiselect' => false, 'options' => [['Studio / 1 bedroom', 0], ['2 bedrooms', 2000], ['3+ bedrooms', 4000]]]], 'addon_categories' => ['extras']],
+                    'deep-clean'     => ['name' => 'Deep Clean', 'description' => 'Top to bottom, including inside cabinets.', 'price' => 14500, 'category' => 'cleaning', 'tags' => ['cleaning'], 'is_service' => true, 'is_bookable' => true, 'can_pickup' => false, 'meta' => ['service' => ['duration_minutes' => 360]], 'addon_categories' => ['extras']],
+                    'aircon-service' => ['name' => 'Aircon Servicing', 'description' => 'Filter wash and coil check, per unit.', 'price' => 3500, 'category' => 'specialty', 'tags' => ['aircon'], 'is_service' => true, 'is_bookable' => true, 'can_pickup' => false, 'meta' => ['service' => ['duration_minutes' => 45]]],
+                    'sofa-clean'     => ['name' => 'Sofa Shampoo', 'description' => 'Fabric sofa, up to 3 seats.', 'price' => 8900, 'sale_price' => 7500, 'category' => 'specialty', 'tags' => ['upholstery'], 'is_service' => true, 'is_bookable' => true, 'can_pickup' => false, 'meta' => ['service' => ['duration_minutes' => 90]]],
+                ],
+                'catalog' => ['name' => 'Lion City Cleaning Services', 'categories' => ['Home Cleaning' => ['standard-clean', 'deep-clean'], 'Specialty' => ['aircon-service', 'sofa-clean']]],
+            ],
+            [
+                'key'              => 'tiong-bahru-wellness',
+                'network_category' => 'services',
+                'order_count'      => 0,
+                'name'             => 'Tiong Bahru Wellness',
+                'description'      => 'Hair, nails and massage. Book a time at the studio.',
+                'email'            => 'wellness@example.test',
+                'phone'            => '+65 6100 0307',
+                'tags'             => ['services', 'salon', 'spa'],
+                'gateway'          => null,
+                'location'         => ['name' => 'Tiong Bahru Wellness', 'street1' => '302 Tiong Bahru Road', 'city' => 'Singapore', 'postal_code' => '168732', 'country' => 'SG', 'lat' => 1.2865, 'lng' => 103.8270],
+                'hours'            => ['start' => '10:00', 'end' => '21:00', 'closed' => ['monday']],
+                'categories'       => [
+                    'hair'    => ['name' => 'Hair', 'description' => 'Cuts and colour.'],
+                    'massage' => ['name' => 'Massage', 'description' => 'Relaxation and deep tissue.'],
+                    'nails'   => ['name' => 'Nails', 'description' => 'Manicures and pedicures.'],
+                ],
+                'products' => [
+                    'haircut'        => ['name' => 'Haircut & Blow Dry', 'description' => 'Consultation, wash, cut and style.', 'price' => 4800, 'category' => 'hair', 'tags' => ['hair'], 'recommended' => true, 'is_service' => true, 'is_bookable' => true, 'meta' => ['service' => ['duration_minutes' => 60]], 'variants' => [['name' => 'Stylist', 'required' => true, 'multiselect' => false, 'options' => [['Stylist', 0], ['Senior Stylist', 1500]]]]],
+                    'hair-colour'    => ['name' => 'Full Colour', 'description' => 'Single process colour with gloss.', 'price' => 12000, 'category' => 'hair', 'tags' => ['colour'], 'is_service' => true, 'is_bookable' => true, 'meta' => ['service' => ['duration_minutes' => 120]]],
+                    'swedish-60'     => ['name' => 'Swedish Massage 60 min', 'description' => 'Full body, light to medium pressure.', 'price' => 9800, 'category' => 'massage', 'tags' => ['massage'], 'recommended' => true, 'is_service' => true, 'is_bookable' => true, 'meta' => ['service' => ['duration_minutes' => 60]]],
+                    'deep-tissue-90' => ['name' => 'Deep Tissue Massage 90 min', 'description' => 'Firm pressure for tight muscles.', 'price' => 14800, 'category' => 'massage', 'tags' => ['massage'], 'is_service' => true, 'is_bookable' => true, 'meta' => ['service' => ['duration_minutes' => 90]]],
+                    'gel-manicure'   => ['name' => 'Gel Manicure', 'description' => 'Shape, cuticle care and gel colour.', 'price' => 4500, 'category' => 'nails', 'tags' => ['nails'], 'is_service' => true, 'is_bookable' => true, 'meta' => ['service' => ['duration_minutes' => 45]]],
+                ],
+                'catalog' => ['name' => 'Tiong Bahru Wellness Menu', 'categories' => ['Hair' => ['haircut', 'hair-colour'], 'Massage' => ['swedish-60', 'deep-tissue-90'], 'Nails' => ['gel-manicure']]],
+            ],
         ];
     }
 
     /**
-     * Network-wide promotions, segments and campaigns, from Storefront's testing seeders. Its
-     * service stores are not ported (their products have no photos here), so the upcoming
-     * promotion is Lunar New Year instead of the services launch: on the capture's
-     * 2026-01-20 it is genuinely four weeks away.
+     * Network-wide promotions, segments and campaigns, from Storefront's testing seeders. The
+     * upcoming promotion is Lunar New Year rather than the testing seeders' services launch: on
+     * the capture's 2026-01-20 it is genuinely four weeks away.
      */
     protected function marketingDefinition(): array
     {

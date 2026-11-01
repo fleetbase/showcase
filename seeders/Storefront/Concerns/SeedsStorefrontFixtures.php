@@ -81,6 +81,8 @@ use Illuminate\Support\Str;
  *     'products'    => ['orchard-box' => ['name' => ..., 'description' => ..., 'price' => 2850, 'category' => 'produce', 'tags' => [], 'recommended' => true,
  *                                          'variants' => [['name' => 'Box Size', 'required' => true, 'multiselect' => false, 'options' => [['Small', 0], ['Family', 1200]]]],
  *                                          'addon_categories' => ['gift']]],
+ *                    // a bookable service: 'is_service' => true, 'is_bookable' => true, 'can_pickup' => false,
+ *                    //                     'meta' => ['service' => ['duration_minutes' => 60]] (merged into the product's meta)
  *     'catalog'     => ['name' => ..., 'description' => ..., 'categories' => ['Fresh Picks' => ['orchard-box', 'market-veg']]],
  * ]
  */
@@ -579,7 +581,7 @@ trait SeedsStorefrontFixtures
             'name'            => $product['name'],
             'description'     => $product['description'] ?? null,
             'tags'            => $product['tags'] ?? [],
-            'meta'            => $this->meta('product:' . $storeKey . ':' . $productKey),
+            'meta'            => $this->meta('product:' . $storeKey . ':' . $productKey, $product['meta'] ?? []),
             'sku'             => $product['sku'] ?? 'SF-' . Str::upper(Str::slug($storeKey . '-' . $productKey)),
             'price'           => (int) $product['price'],
             'currency'        => $product['currency'] ?? $store->currency,
