@@ -1,27 +1,70 @@
-# fleetbase/showcase
+<p align="center">
+  <a href="https://fleetbase.io">
+    <img src="https://user-images.githubusercontent.com/58805033/191936702-fed04b0f-7966-4041-96d0-95e27bf98248.png" alt="Fleetbase logo" width="400">
+  </a>
+</p>
 
-Marketing screenshot pipeline. On each Fleetbase release this boots the stack **from the
-published Docker images**, seeds its own demo data, captures the console, and opens a pull
-request on [fleetbase.io](https://github.com/fleetbase/fleetbase.io) with the screenshots that
-actually changed.
+<h1 align="center">Fleetbase Showcase</h1>
 
-It lives outside the open-source monorepo for two reasons. Demo fixture data and marketing
-tooling do not belong in AGPL product repos — and a pipeline living in the OSS monorepo could
-only ever screenshot the open-source engines, never `pallet`, `billing` or `flespi`.
+<p align="center">
+  <a href="LICENSE.md"><img src="https://img.shields.io/github/license/fleetbase/showcase" alt="License: AGPL-3.0"></a>
+  <a href="https://github.com/fleetbase/showcase/actions/workflows/screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/screenshots.yml/badge.svg" alt="Console Screenshots"></a>
+  <a href="https://github.com/fleetbase/showcase/actions/workflows/storefront-app-screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/storefront-app-screenshots.yml/badge.svg" alt="Storefront app screenshots"></a>
+  <a href="https://github.com/fleetbase/fleetbase/releases"><img src="https://img.shields.io/github/v/release/fleetbase/fleetbase?label=fleetbase" alt="Latest Fleetbase release"></a>
+  <a href="https://discord.gg/V7RVWRQ2Wm"><img src="https://img.shields.io/discord/699834923032248430?logo=discord&label=Discord" alt="Discord"></a>
+</p>
+
+<p align="center">
+  <strong>The screenshot pipeline behind <a href="https://fleetbase.io">fleetbase.io</a></strong>
+  <br>
+  <a href="https://github.com/fleetbase/fleetbase">Fleetbase</a>
+  ·
+  <a href="https://www.fleetbase.io/docs">Documentation</a>
+  ·
+  <a href="https://github.com/fleetbase/storefront-app">Storefront app</a>
+</p>
+
+---
+
+Every product screenshot on [fleetbase.io](https://fleetbase.io) and in the Fleetbase
+documentation comes from here. On each Fleetbase release, this repository boots that release
+**from its published Docker images**, seeds a fictional demo company, captures the console in
+dark and light, and proposes only the screenshots that actually changed as a pull request to
+the website. The same seeded stack drives the [Storefront app](https://github.com/fleetbase/storefront-app)
+on an iOS Simulator and an Android Emulator.
+
+It is published as a working reference: how to run Fleetbase from the official images, how to
+seed it with realistic data, and how to make screenshots of a web app reproducible enough to
+automate. It is not a supported product, and most people will want
+[Fleetbase itself](https://github.com/fleetbase/fleetbase).
+
+- **Real releases, nothing built:** every image is pinned to the release tag, so a screenshot shows exactly what that version ships.
+- **Fictional, deterministic data:** fixed names, places and timestamps (a logistics company in Singapore), with no Faker and no random ids, so two runs produce the same pixels.
+- **Two gates before publishing:** a DOM hash and a pixel comparison, so a pull request only carries screens that really changed.
+- **Dark and light:** every screen in both themes, named by one rule ([NAMING.md](NAMING.md)).
+
+## How it works
 
 ```
-fleetbase/fleetbase  v0.7.58 tag
-  └─ publish-docker-images.yml → pushes fleetbase-{console,api}:v0.7.58
-                               → repository_dispatch → here
-                                            │
-  boot published images behind ONE proxy on http://localhost
-  → provision → seed → capture → two-gate compare → one PR
+fleetbase/fleetbase release vX.Y.Z
+  └─ publishes fleetbase-console:vX.Y.Z and fleetbase-api:vX.Y.Z
+     └─ repository_dispatch → this repository
+          │
+          boot the published images behind one proxy on http://localhost
+          → provision → seed → capture (Playwright) → compare → pull request on fleetbase.io
 ```
+
+It lives apart from the main repository so that demo data and marketing tooling stay out of
+the product, and so the same pipeline can also capture extensions that are not part of the
+open-source monorepo.
 
 ## Quick start
 
+You need Docker and Node 22. The console image is amd64-only, so on Apple silicon it runs
+under emulation (see [caveats](#running-locally-caveats)).
+
 ```bash
-RELEASE_TAG=v0.7.59 ./scripts/up.sh
+RELEASE_TAG=v0.7.74 ./scripts/up.sh
 ```
 
 ```bash
@@ -40,102 +83,100 @@ cd capture && npm ci && npx playwright install chromium && cd ..
 SHOWCASE_PASSWORD='ShowcaseDemo1!' ./scripts/capture.sh iam
 ```
 
-Always capture through `scripts/capture.sh`, not by calling the capture package directly. It
-enforces an ordering that matters: authenticate → freeze server-side timestamps → capture with
-the token already in hand. A login performed *inside* the capture writes `last_login`, which
-the IAM users screen renders — so the file would differ on every run. Measured: with the login
-inside, 6 of 8 files were byte-identical across two runs; with this ordering, 8 of 8 are.
+`SHOWCASE_PASSWORD` is the password of the seeded demo users on your local stack; pick any.
+The console is then on [http://localhost](http://localhost), and the screenshots land in
+`capture/out/`.
 
-## Running it from GitHub
+Always capture through `scripts/capture.sh` rather than calling the capture package directly.
+It enforces an order that matters: authenticate, freeze server-side timestamps, then capture
+with the token already in hand. A login performed *inside* the capture writes `last_login`,
+which the IAM users screen renders, so the file would differ on every run. With the login
+inside, 6 of 8 files were byte-identical across two runs; with this order, 8 of 8 are.
 
-The usual way to get screenshots is the **Console Screenshots** workflow — Actions → Run
-workflow. Give it a release tag and the areas to capture; it uploads the results as an artifact.
-Opening a pull request on fleetbase.io is opt-in via `open_pr`, so a plain run only produces
-images to look at.
+## GitHub Actions
 
-It needs one secret, `SHOWCASE_PASSWORD` (plus `FLEETBASE_IO_TOKEN` if you turn `open_pr` on).
-A run takes well over half an hour, most of it in `deploy.sh` — `PermissionSeeder` alone is
-about nine minutes before any browser starts.
+| Workflow | What it does | Trigger |
+| --- | --- | --- |
+| [Console Screenshots](.github/workflows/screenshots.yml) | Captures the console areas you choose (`iam`, `fleet-ops`, `admin`, `general`, `developers`, `ledger`, `extensions`, `storefront`) and uploads them as an artifact. | Fleetbase release (`repository_dispatch: fleetbase-release`) or by hand |
+| [Storefront app screenshots](.github/workflows/storefront-app-screenshots.yml) | Captures the Storefront app on iOS and Android, per edition, in dark and light, and uploads a review gallery. | Storefront app release (`repository_dispatch: storefront-app-release`) or by hand |
 
-Prefer the workflow over a local run for anything you intend to publish. It is amd64 natively,
-whereas the console image is amd64-only and runs under slow emulation on Apple silicon.
+Both open a pull request on fleetbase.io only when asked to: the `open_pr` input, or
+`OPEN_PR_ON_RELEASE=true` for release runs. A plain run only produces images to look at.
 
-## The four things that will surprise you
+Secrets: `SHOWCASE_PASSWORD` (required), `FLEETBASE_IO_TOKEN` (only for `open_pr`), and the
+optional map and payment keys described below.
+
+Prefer the workflows over a local run for anything you intend to publish: the runners are
+amd64, and their fonts render the way the published screenshots do.
+
+## Things that will surprise you
 
 **1. Everything is on port 80, and that is not negotiable.** The published console image is
-built `ENVIRONMENT=production`, so `API_HOST` is empty and `disableRuntimeConfig` is true — it
-never fetches `/fleetbase.config.json`, even though the image ships one. So mounting a config
+built `ENVIRONMENT=production`, so `API_HOST` is empty and `disableRuntimeConfig` is true: it
+never fetches `/fleetbase.config.json`, even though the image ships one, so mounting a config
 over it does nothing. `@fleetbase/ember-core`'s fetch service then falls back to
-`` `${window.location.protocol}//${window.location.hostname}` `` — **dropping the port**. The
+`` `${window.location.protocol}//${window.location.hostname}` ``, **dropping the port**. The
 API therefore has to answer on the same origin on the default port, which is what
 `docker/caddy/Caddyfile` is for. It is also how a real deployment is shaped, so the screenshots
 are more faithful this way, not less.
 
 **2. Some prefixes are both a console route and an API route.** `/storefront/int/v1/dashboard`
-is the API; `/storefront/products` is the SPA. Same for `ledger`, `valhalla`, `vroom`,
-`customer-portal` and `ai`. The proxy's `@api` matcher is ordered accordingly.
+is the API; `/storefront/products` is the console. The same goes for `ledger`, `valhalla`,
+`vroom`, `customer-portal`, `ai` and `oauth`. The proxy's `@api` matcher is ordered
+accordingly.
 
 Get this wrong and nothing looks broken: an unclaimed API path falls through to the console,
 which answers `200 text/html` for anything, the app fails to parse JSON, and the screen renders
-as an empty table that screenshots perfectly. Two guards exist because of this —
+as an empty table that screenshots perfectly. Two guards exist because of this:
 `scripts/assert-routes.sh` diffs the matcher against `php artisan route:list` at provision
-time, and the capture fails any entry whose `/int/` request comes back as HTML. The first draft
-of that matcher was missing five real prefixes; the guard found them.
+time, and the capture fails any entry whose `/int/` request comes back as HTML.
 
 **3. The theme comes from the server, not the browser.** Playwright's `colorScheme` does
 nothing on its own: `GET int/v1/settings/branding` returns `brand.default_theme` (`"dark"` on a
-stock install) and the console applies it over `prefers-color-scheme`. Verified — emulating
-light and dark both produced `body[data-theme="dark"]`. The one lever that wins is the
-persisted user option at `<user uuid>:theme` in the `@fleetbase/storage:user-options` bucket,
-which is why the capture fetches the uuid from `auth/session` before the browser starts.
-Discovering it after boot is a race that silently leaves every capture on the brand theme.
+stock install) and the console applies it over `prefers-color-scheme`. The one lever that wins
+is the persisted user option at `<user uuid>:theme` in the `@fleetbase/storage:user-options`
+bucket, which is why the capture fetches the uuid from `auth/session` before the browser
+starts. Discovering it after boot is a race that silently leaves every capture on the brand
+theme.
 
-**4. An empty ember-ui table still renders a row.** It has class
-`next-table-empty-state-row`, so a plain `tbody tr` selector matches it and an `expectRows`
-check of `min: 1` would pass on a table with no data. The manifest's `TABLE_ROW` excludes it.
-That is the difference between "the seeder failed" and "we published a picture of an empty
-state".
+**4. An empty table still renders a row.** It has the class `next-table-empty-state-row`, so a
+plain `tbody tr` selector matches it, and an `expectRows` check of `min: 1` would pass on a
+table with no data. The manifests' `TABLE_ROW` excludes it. That is the difference between
+"the seeder failed" and "we published a picture of an empty state".
 
-## Layout
+## Repository layout
 
 | Path | What |
 | --- | --- |
-| `docker-compose.yml` | The stack. Every image pinned to `${RELEASE_TAG}`; nothing is built. |
+| `docker-compose.yml` | The stack. Every image is pinned to `${RELEASE_TAG}`; nothing is built. |
 | `docker/caddy/Caddyfile` | The single-origin proxy and its ordered path map. |
 | `scripts/` | `up` → `provision` → `seed` → `capture`, plus `assert-routes` and `freeze-timestamps`. |
-| `seeders/*/Concerns/BelongsTo*.php` | Per-area seed tags. Areas share tables (users, most notably), so each tags its own rows or one area's purge deletes another's. |
-| `seeders/` | Bind-mounted into the running API container as `Database\Seeders\Showcase\`. |
-| `capture/` | The Playwright capture package and its manifests. |
+| `scripts/mobile/` | The Storefront app capture: tunnel, fixtures, app `.env`, build and Maestro run. |
+| `seeders/` | The demo data, bind-mounted into the API container as `Database\Seeders\Showcase\`. |
+| `capture/` | The Playwright capture package, its manifests (one per console area), the compare and the galleries. |
+| [`COVERAGE.md`](COVERAGE.md) | Which fleetbase.io screenshots are generated here, and which are not yet. |
+| [`NAMING.md`](NAMING.md) | How every published file is named. |
 
 ## Seeders
 
 They are bind-mounted to `/fleetbase/api/database/seeders/Showcase`, which is already inside
-the image's `Database\Seeders\` PSR-4 prefix — so no autoload surgery, and editing one is a
-file save rather than a rebuild. `scripts/seed.sh` re-dumps the autoloader anyway, which is
-what makes *adding* a class work without thinking about it.
+the image's `Database\Seeders\` PSR-4 prefix, so there is no autoload surgery and editing one
+is a file save rather than a rebuild. `scripts/seed.sh` re-dumps the autoloader anyway, which
+is what makes *adding* a class work.
 
-`seeders/Concerns/SeedsShowcaseData.php` is a deliberate fork of fleetops'
-`SeedsTestingData`. It has to be: that trait declares `SEED_NAME` as a **constant**, and PHP
-rejects a class that redeclares a trait constant with a different value — so a showcase seeder
-using it would tag its rows `fleetops-testing` and get purged by fleetops' own seeder. The fork
-is small and dependency-light so the drift stays cheap.
+Areas share tables (users, most notably), so each tags its own rows
+(`seeders/*/Concerns/BelongsTo*.php`); otherwise one area's purge would delete another's.
 
-No Faker: the published API image is installed `--no-dev`. Fixed values are what determinism
-wants anyway.
+`seeders/Concerns/SeedsShowcaseData.php` is a deliberate fork of Fleet-Ops' `SeedsTestingData`.
+It has to be: that trait declares `SEED_NAME` as a **constant**, and PHP rejects a class that
+redeclares a trait constant with a different value, so a showcase seeder using it would tag
+its rows `fleetops-testing` and be purged by Fleet-Ops' own seeder.
 
-### Status
+There is no Faker: the published API image is installed `--no-dev`, and fixed values are what
+determinism wants anyway. The people and companies in the seed data are fictional; the
+places are real Singapore locations.
 
-| Area | Seeder | Manifest |
-| --- | --- | --- |
-| Organization | ✅ | — |
-| IAM | ✅ | ✅ 4 entries, captured |
-| Fleet-Ops | ✅ | ✅ 14 entries, captured |
-| General | ⬜ | ⬜ |
-| Developers | ⬜ | ⬜ |
-| Storefront | ⬜ | ⬜ |
-| Ledger | ⬜ | ⬜ |
-
-## Storefront app (iOS and Android)
+## Storefront app screenshots (iOS and Android)
 
 `.github/workflows/storefront-app-screenshots.yml` captures the Storefront mobile app on the iOS Simulator (iPhone 16 Pro Max, 1320×2868) and the Android Emulator (Pixel 7 Pro), against the same seeded release stack, and proposes the changed images under `public/images/screenshots/storefront-app/{ios,android}/` on fleetbase.io.
 
@@ -148,7 +189,7 @@ wants anyway.
 - **Review:** every run uploads `storefront-app-gallery`: unzip it and open `index.html` for every expected screen side by side (iOS and Android, dark and light), with gaps marked and failed flows listed (`capture/bin/gallery-mobile.mjs`, screen list in `capture/src/storefront-app-screens.mjs`). A run goes red when any flow stopped early.
 - **Output:** `capture/out/storefront-app/<platform>/*.png`, encoded to lossless WebP by `capture/bin/encode-mobile.mjs` (the existing app screenshots are lossless). Dark is unsuffixed, light is `-light`, names follow [NAMING.md](NAMING.md).
 
-Optional: `STOREFRONT_APP_GOOGLE_MAPS_API_KEY` (Android map tiles: a key with the Maps SDK for Android enabled for package `com.storefront.app` and the React Native debug signing SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`; falls back to `GOOGLE_MAPS_API_KEY`), and the org's `STRIPE_TEST_KEY` / `STRIPE_TEST_SECRET` (secrets or variables): the seeded Stripe gateways get the test keys and the app is built with the publishable one, so checkout creates a real test payment.
+Optional secrets: `STOREFRONT_APP_GOOGLE_MAPS_API_KEY` (Android map tiles: a key with the Maps SDK for Android enabled for package `com.storefront.app` and the React Native debug signing SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`; falls back to `GOOGLE_MAPS_API_KEY`), and the org's `STRIPE_TEST_KEY` / `STRIPE_TEST_SECRET` (secrets or variables): the seeded Stripe gateways get the test keys and the app is built with the publishable one, so checkout creates a real test payment.
 
 Locally, with a booted simulator and `maestro` installed:
 
@@ -182,7 +223,7 @@ What to know before enabling it:
   stage them into the fleetbase.io pull request unless run with `--include-google`.
 - Keep Google's logo and attribution visible in anything published.
 
-## Local caveats
+## Running locally: caveats
 
 Output from a native macOS run is visually correct but **not** byte-comparable to CI — CoreText
 and FreeType rasterise glyphs differently, so every file would read as changed. For a
@@ -199,3 +240,26 @@ files rather than a wrong runtime.
 
 If your own Fleetbase dev stack already owns port 38000, set `WSS_PORT` to something else. You
 lose the realtime screens — the console has `38000` compiled in — but everything else captures.
+
+## Contributing
+
+Issues and pull requests are welcome, particularly for seed data that makes a screen look more
+like real use, and for determinism fixes. This repository serves the Fleetbase website first,
+so changes that would alter published screenshots are reviewed with that in mind. For
+Fleetbase itself, head to the [main repository](https://github.com/fleetbase/fleetbase) and
+its [Discord](https://discord.gg/V7RVWRQ2Wm).
+
+## Security
+
+Please report security issues privately; see [SECURITY.md](SECURITY.md).
+
+## License
+
+The code is licensed under the [GNU Affero General Public License v3.0](LICENSE.md), the same
+license as Fleetbase.
+
+Bundled media keeps its own terms: the store and product photos in `seeders/Storefront/images/`
+are from [Unsplash](https://unsplash.com) under the [Unsplash License](https://unsplash.com/license)
+(credits in the folder's READMEs); the extension tiles in `seeders/Extensions/icons/` use
+[Font Awesome Free](https://fontawesome.com/license/free) icons (CC BY 4.0). The Fleetbase name
+and logo are not covered by the license.

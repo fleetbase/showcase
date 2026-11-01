@@ -43,7 +43,7 @@ class UsersSeeder extends Seeder
             'fleet_super'   => ['Kenji Tan', 'kenji.tan@demo.fleetbase.io', '+6581000013', 'Fleet Supervisor', 'active'],
             'maintenance'   => ['Rahul Menon', 'rahul.menon@demo.fleetbase.io', '+6581000014', 'Maintenance Technician', 'active'],
             'finance'       => ['Grace Wong', 'grace.wong@demo.fleetbase.io', '+6581000015', 'Accountant', 'active'],
-            'support'       => ['Siti Nurhaliza', 'siti.n@demo.fleetbase.io', '+6581000016', 'Customer Service', 'active'],
+            'support'       => ['Siti Rahmah', 'siti.rahmah@demo.fleetbase.io', '+6581000016', 'Customer Service', 'active'],
             'developer'     => ['Marcus Lim', 'marcus.lim@demo.fleetbase.io', '+6581000017', 'Fleetbase Developer', 'active'],
             'inventory'     => ['Aisha Karim', 'aisha.karim@demo.fleetbase.io', '+6581000018', 'Inventory Manager', 'active'],
             'coordinator'   => ['Daniel Ong', 'daniel.ong@demo.fleetbase.io', '+6581000019', 'Driver Coordinator', 'active'],
