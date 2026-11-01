@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleetbase Screenshots</title>
+<meta name="description" content="The latest automated screenshots of the Fleetbase console and the Storefront app, in dark and light.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* The landing page of the published galleries (publish-gallery.yml): one card per gallery. */
+:root { --bg: #f3f4f6; --sheet: #ffffff; --ink: #161a20; --muted: #5d6573; --line: #dde1e7; --accent: #2f5bd3; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #101318; --sheet: #171b22; --ink: #e9ecf1; --muted: #98a1af; --line: #2a303a; --accent: #7d9cff; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #101318; --sheet: #171b22; --ink: #e9ecf1; --muted: #98a1af; --line: #2a303a; --accent: #7d9cff; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif; padding: 0 16px 64px; }
+.wrap { max-width: 920px; margin: 0 auto; }
+header { padding-block: 56px 28px; display: grid; gap: 12px; }
+.eyebrow { font: 500 12px/1 'IBM Plex Mono', ui-monospace, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.1 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 62ch; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.card { display: grid; gap: 8px; background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 22px; color: inherit; text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card h2 { font: 700 22px/1.2 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif; margin: 0; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+.card span { color: var(--accent); font-weight: 600; font-size: 15px; }
+footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
+footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <div class="eyebrow">fleetbase/showcase</div>
+        <h1>Fleetbase Screenshots</h1>
+        <p>The latest automated screenshots of Fleetbase, captured from the published release with fictional demo data, in dark and light. These are the images behind fleetbase.io.</p>
+    </header>
+    <div class="cards">
+        <a class="card" href="console/">
+            <h2>Console</h2>
+            <p>Fleet-Ops, Storefront, Ledger, IAM and the rest of the web console, area by area.</p>
+            <span>Open the console gallery →</span>
+        </a>
+        <a class="card" href="storefront-app/">
+            <h2>Storefront app</h2>
+            <p>The customer app on iOS and Android, for a single store, a network and food trucks.</p>
+            <span>Open the app gallery →</span>
+        </a>
+    </div>
+    <footer>
+        Built by <a href="https://github.com/fleetbase/showcase">fleetbase/showcase</a> ·
+        <a href="https://fleetbase.io">fleetbase.io</a> ·
+        <a href="https://github.com/fleetbase/fleetbase">Fleetbase on GitHub</a>
+    </footer>
+</div>
+</body>
+</html>

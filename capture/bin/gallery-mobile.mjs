@@ -106,7 +106,7 @@ async function main() {
 
     const template = await readFile(path.join(here, '..', 'gallery', 'template.html'), 'utf8');
     const body = template.replace('/*DATA*/null', JSON.stringify(data).replace(/</g, '\\u003c'));
-    const page = `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<title>Storefront app screenshots</title>\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
+    const page = `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
     await writeFile(path.join(outDir, 'index.html'), page);
 
     const summary = `**Storefront app screenshots:** ${captured} of ${total} captured (iOS ${perPlatform.ios}, Android ${perPlatform.android}). Download the \`storefront-app-gallery\` artifact and open \`index.html\` to review them.`;
