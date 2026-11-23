@@ -127,6 +127,14 @@ fi
 # flow : the driver actor's step after it ("-" for none)
 STEPS=(01-sign-in:- 02-account:- 03-book:accept 04-en-route:arrive 05-arrived:start 06-in-progress:complete 07-complete:clear)
 
+# The emulator's own apps can hang on a busy runner and cover the app with a dialog; see
+# android-anr-watcher.sh.
+if [[ "$PLATFORM" == android ]]; then
+    ./scripts/mobile/android-anr-watcher.sh "$APP_ID" &
+    WATCHER=$!
+    trap 'kill "$WATCHER" 2>/dev/null || true' EXIT
+fi
+
 run_flow() {
     local flow="$1" theme="$2" suffix="$3" shots="$4"
     local debug="${OUT}/debug/${theme}/${flow}"
@@ -157,6 +165,8 @@ for THEME in "${THEMES[@]}"; do
     touch "$SHOTS/.start"
     rm -f .passenger-ride.json
 
+    HEARTBEATS=()
+
     # One retry for the whole theme: the first launch after an install sometimes loses the
     # driver (iOS "driver not ready in time") or a tap. A trip left half-way is deleted first.
     for ATTEMPT in 1 2; do
@@ -177,13 +187,15 @@ for THEME in "${THEMES[@]}"; do
             # itself once the trip is cleared.
             if [[ "$ACTION" == accept ]]; then
                 python3 scripts/mobile/passenger-driver.py heartbeat --url "$URL" &
+                HEARTBEATS+=($!)
             fi
         done
         [[ -z "$FAILED" ]] && break
         echo "==> ${THEME}: attempt ${ATTEMPT} stopped at ${FAILED}"
         [[ -f .passenger-ride.json ]] && driver clear || true
     done
-    wait
+    # Only the heartbeats: the watcher runs until the script exits.
+    [[ ${#HEARTBEATS[@]} -gt 0 ]] && wait "${HEARTBEATS[@]}" || true
     [[ -n "$FAILED" ]] && echo "${THEME}: stopped at ${FAILED}; partial screenshots kept" >>"$FAILURES"
 
     find "$SHOTS" "${OUT}/debug" "$APP_DIR/.maestro" "$HOME/.maestro/tests" -name 'passenger-app-*.png' -newer "$SHOTS/.start" -exec mv {} "$OUT/" \; 2>/dev/null || true
