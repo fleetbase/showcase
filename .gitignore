@@ -5,3 +5,7 @@
 capture/node_modules/
 capture/out/
 capture/.cache/
+
+# The Passenger capture: fixtures read from the stack, and the trip the driver actor is on.
+.passenger-fixtures.json
+.passenger-ride.json

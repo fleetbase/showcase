@@ -109,7 +109,7 @@ body.missing-only .row:not(.has-gap) { display: none; }
 <div class="wrap">
     <header class="top">
         <div class="eyebrow" id="eyebrow">showcase · storefront-app-screenshots.yml</div>
-        <h1>Storefront App Screenshots</h1>
+        <h1 id="title">Storefront App Screenshots</h1>
         <div class="summary" id="summary"></div>
         <div id="fails"></div>
     </header>
@@ -156,13 +156,21 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const PLATFORM = { ios: 'iOS', android: 'Android' };
 const THEME = { dark: 'Dark', light: 'Light' };
 
+// The page serves every mobile app; older galleries carry no app and are Storefront's.
+const APP = DATA.app || 'storefront-app';
+if (DATA.title) {
+    document.getElementById('title').textContent = DATA.title;
+    document.title = DATA.title;
+}
+if (DATA.workflow) document.getElementById('eyebrow').textContent = `showcase · ${DATA.workflow}`;
+
 const summary = document.getElementById('summary');
 summary.innerHTML = `
     <div><b>${DATA.captured}</b> of ${DATA.total} captured</div>
     <div>iOS <b>${DATA.perPlatform.ios}</b></div>
     <div>Android <b>${DATA.perPlatform.android}</b></div>
     ${DATA.run ? `<div><a href="https://github.com/fleetbase/showcase/actions/runs/${esc(DATA.run)}">Run ${esc(DATA.run)}</a></div>` : ''}
-    ${DATA.appRef ? `<div>storefront-app <b>${esc(DATA.appRef)}</b></div>` : ''}
+    ${DATA.appRef ? `<div>${esc(APP)} <b>${esc(DATA.appRef)}</b></div>` : ''}
     ${DATA.release ? `<div>Fleetbase <b>${esc(DATA.release)}</b></div>` : ''}`;
 
 const failLines = [...DATA.failures.ios.map((l) => 'iOS · ' + l), ...DATA.failures.android.map((l) => 'Android · ' + l)];

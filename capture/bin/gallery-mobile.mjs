@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // screenshots/bin/gallery-mobile.mjs
 //
-// A review page for a Storefront app capture: every expected screen in a row, iOS and Android
-// in dark and light side by side, gaps marked, click to enlarge. Open index.html straight from
-// the unzipped artifact; it needs no server.
+// A review page for a mobile app capture (the Storefront app, or with --app passenger-app the
+// Passenger app): every expected screen in a row, iOS and Android in dark and light side by
+// side, gaps marked, click to enlarge. Open index.html straight from the unzipped artifact; it
+// needs no server.
 //
 //   node bin/gallery-mobile.mjs \
 //     --ios ./out/raw/storefront-app-ios --android ./out/raw/storefront-app-android \
@@ -18,21 +19,34 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import sharp from 'sharp';
+import { PASSENGER_APP_PLATFORMS, PASSENGER_APP_SECTIONS, PASSENGER_APP_THEMES } from '../src/passenger-app-screens.mjs';
 import { STOREFRONT_APP_EDITIONS, STOREFRONT_APP_PLATFORMS, STOREFRONT_APP_THEMES } from '../src/storefront-app-screens.mjs';
+
+// What each app's page lists and is called. `workflow` is the eyebrow; `repo` labels --app-ref.
+const APPS = {
+    'storefront-app': { title: 'Storefront App Screenshots', name: 'Storefront app', workflow: 'storefront-app-screenshots.yml', sections: STOREFRONT_APP_EDITIONS, platforms: STOREFRONT_APP_PLATFORMS, themes: STOREFRONT_APP_THEMES },
+    'passenger-app': { title: 'Passenger App Screenshots', name: 'Passenger app', workflow: 'passenger-app-screenshots.yml', sections: PASSENGER_APP_SECTIONS, platforms: PASSENGER_APP_PLATFORMS, themes: PASSENGER_APP_THEMES },
+};
 
 const { values } = parseArgs({
     options: {
         ios: { type: 'string' },
         android: { type: 'string' },
-        out: { type: 'string', default: './out/storefront-app-gallery' },
+        app: { type: 'string', default: 'storefront-app' },
+        out: { type: 'string' },
         run: { type: 'string', default: '' },
         'app-ref': { type: 'string', default: '' },
         release: { type: 'string', default: '' },
     },
 });
 
+const app = APPS[values.app];
+if (!app) {
+    console.error(`::error::--app must be one of ${Object.keys(APPS).join(', ')}`);
+    process.exit(1);
+}
 const here = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.resolve(values.out);
+const outDir = path.resolve(values.out ?? `./out/${values.app}-gallery`);
 const sources = { ios: values.ios ? path.resolve(values.ios) : null, android: values.android ? path.resolve(values.android) : null };
 
 async function skipped(platform) {
@@ -65,14 +79,14 @@ async function main() {
     const perPlatform = { ios: 0, android: 0 };
     const sections = [];
 
-    for (const edition of STOREFRONT_APP_EDITIONS) {
+    for (const edition of app.sections) {
         const skipReason = skippedEditions[edition.key] ?? null;
         let editionCaptured = 0;
         const rows = [];
         for (const [name, label] of edition.screens) {
             const cells = [];
-            for (const platform of STOREFRONT_APP_PLATFORMS) {
-                for (const [theme, suffix] of STOREFRONT_APP_THEMES) {
+            for (const platform of app.platforms) {
+                for (const [theme, suffix] of app.themes) {
                     if (!skipReason) total += 1;
                     const file = `${name}${suffix}.png`;
                     const source = sources[platform] ? path.join(sources[platform], file) : null;
@@ -94,6 +108,9 @@ async function main() {
     }
 
     const data = {
+        app: values.app,
+        title: app.title,
+        workflow: app.workflow,
         run: values.run,
         appRef: values['app-ref'],
         release: values.release,
@@ -109,7 +126,7 @@ async function main() {
     const page = `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
     await writeFile(path.join(outDir, 'index.html'), page);
 
-    const summary = `**Storefront app screenshots:** ${captured} of ${total} captured (iOS ${perPlatform.ios}, Android ${perPlatform.android}). Download the \`storefront-app-gallery\` artifact and open \`index.html\` to review them.`;
+    const summary = `**${app.name} screenshots:** ${captured} of ${total} captured (iOS ${perPlatform.ios}, Android ${perPlatform.android}). Download the \`${values.app}-gallery\` artifact and open \`index.html\` to review them.`;
     if (process.env.GITHUB_STEP_SUMMARY) await writeFile(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`, { flag: 'a' });
     if (process.env.GITHUB_OUTPUT) await writeFile(process.env.GITHUB_OUTPUT, `captured=${captured}\ntotal=${total}\n`, { flag: 'a' });
     console.log(`${captured}/${total} screenshots in ${path.relative(process.cwd(), outDir) || '.'}/index.html`);

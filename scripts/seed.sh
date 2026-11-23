@@ -3,6 +3,7 @@
 #
 #   ./scripts/seed.sh                # all areas
 #   ./scripts/seed.sh fleet-ops      # just Fleet-Ops — purges and reseeds only its rows
+#   ./scripts/seed.sh passenger      # the Passenger app's riders, drivers and car classes (not in "all")
 #
 # The dump-autoload is unconditional and cheap (~2s). Editing an existing seeder does not need
 # it — PHP reads the file from disk through the bind mount on the next artisan call — but
@@ -17,7 +18,7 @@ AREA="${1:-all}"
 # A case statement rather than an associative array: macOS ships bash 3.2, which has no
 # `declare -A`, and this script has to behave identically on a developer's Mac and on an
 # ubuntu-latest runner.
-AREAS="all organization general iam fleet-ops developers storefront ledger extensions"
+AREAS="all organization general iam fleet-ops developers storefront ledger extensions passenger"
 case "$AREA" in
     all)          CLASS='Database\Seeders\Showcase\ShowcaseSeeder' ;;
     organization) CLASS='Database\Seeders\Showcase\Organization\OrganizationSeeder' ;;
@@ -28,6 +29,8 @@ case "$AREA" in
     storefront)   CLASS='Database\Seeders\Showcase\Storefront\StorefrontSeeder' ;;
     extensions)   CLASS='Database\Seeders\Showcase\Extensions\ExtensionsSeeder' ;;
     ledger)       CLASS='Database\Seeders\Showcase\Ledger\LedgerSeeder' ;;
+    # Not part of "all": the Passenger app capture seeds it after the rest (see the seeder).
+    passenger)    CLASS='Database\Seeders\Showcase\Passenger\PassengerSeeder' ;;
     *)
         echo "::error::unknown area '${AREA}'. One of: ${AREAS}"
         exit 1

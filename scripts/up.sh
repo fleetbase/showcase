@@ -47,10 +47,13 @@ WSS_PORT="$(carry WSS_PORT 38000)"
 # so a key given once survives the next up.sh.
 GOOGLE_MAPS_API_KEY="$(carry GOOGLE_MAPS_API_KEY "")"
 # The mobile capture only (scripts/mobile/): the public origin the app reaches the stack on,
-# and the Storefront sign-in bypass for the seeded review customer. Empty for console runs.
+# and the Storefront and Passenger sign-in bypasses for the seeded customers. Empty for console
+# runs.
 APP_URL="$(carry APP_URL "")"
 STOREFRONT_BYPASS_VERIFICATION_CODE="$(carry STOREFRONT_BYPASS_VERIFICATION_CODE "")"
 STOREFRONT_REVIEW_ACCOUNTS="$(carry STOREFRONT_REVIEW_ACCOUNTS "")"
+FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE="$(carry FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE "")"
+FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS="$(carry FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS "")"
 
 cat > .env <<ENV
 # Written by scripts/up.sh — not committed.
@@ -62,6 +65,8 @@ GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
 APP_URL=${APP_URL}
 STOREFRONT_BYPASS_VERIFICATION_CODE=${STOREFRONT_BYPASS_VERIFICATION_CODE}
 STOREFRONT_REVIEW_ACCOUNTS=${STOREFRONT_REVIEW_ACCOUNTS}
+FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE=${FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE}
+FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS=${FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS}
 ENV
 
 if [[ "$HTTP_PORT" != "80" ]]; then

@@ -64,6 +64,11 @@ x-api-env: &api-env
   # disables the bypass.
   STOREFRONT_BYPASS_VERIFICATION_CODE: ${STOREFRONT_BYPASS_VERIFICATION_CODE:-}
   STOREFRONT_REVIEW_ACCOUNTS: ${STOREFRONT_REVIEW_ACCOUNTS:-}
+  # The same for the Passenger app, whose riders sign in through Fleet-Ops' customer API: the
+  # code is accepted only for the numbers in FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS (the seeded
+  # rider). Empty by default, which disables it.
+  FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE: ${FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE:-}
+  FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS: ${FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS:-}
 
 services:
   # ── The single origin ────────────────────────────────────────────────────────────────
