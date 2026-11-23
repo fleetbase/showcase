@@ -128,6 +128,12 @@ appearance() {
 SKIPPED="${OUT}/skipped.txt"
 : >"$SKIPPED"
 
+if [[ "$PLATFORM" == android && "$PHASE" != build ]]; then
+    ./scripts/mobile/android-anr-watcher.sh "$APP_ID" &
+    WATCHER=$!
+    trap 'kill "$WATCHER" 2>/dev/null || true' EXIT
+fi
+
 for EDITION in "${EDITIONS[@]}"; do
     echo "==> ${PLATFORM}: ${EDITION}"
     # A Network's trucks need an API that returns member stores' trucks for a network key;
