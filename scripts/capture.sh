@@ -4,6 +4,8 @@
 #   SHOWCASE_PASSWORD='...' ./scripts/capture.sh iam
 #   SHOWCASE_PASSWORD='...' ./scripts/capture.sh            # every manifest
 #   CAPTURE_MODE=native SHOWCASE_PASSWORD='...' ./scripts/capture.sh iam   # fast local iteration
+#   CAPTURE_MODE=native CAPTURE_ONLY=order-config-activity-flow SHOWCASE_PASSWORD='...' ./scripts/capture.sh fleet-ops
+#                                                                            # just those entries
 #
 # The ordering is the whole point of this wrapper:
 #
@@ -169,7 +171,8 @@ capture_area() {
         (
             cd capture
             BASE_URL="$HOST_URL" API_HOST="$HOST_URL" SHOWCASE_TOKEN="$TOKEN" SEEDED_FIXTURES="$SEEDED_FIXTURES" \
-                npm run --silent capture -- --manifest "$manifest" --out "./out/${area}" --map-provider "$provider"
+                npm run --silent capture -- --manifest "$manifest" --out "./out/${area}" --map-provider "$provider" \
+                ${CAPTURE_ONLY:+--only "$CAPTURE_ONLY"}
         )
         return 0
     fi

@@ -251,12 +251,15 @@ export default {
                     .locator('.fleetops-pill-tabs .ui-tab', { hasText: /activity flow/i })
                     .first()
                     .click();
-                // The editor opens at scale 1, where a ten-step flow shows three and a half
-                // nodes. zoomOut() steps the JointJS paper by 0.2 down to a floor of 0.2;
-                // three steps (0.4) shows most of the main path at a size that still reads.
-                const zoomOut = page.locator('.activity-flow-zoom-controls button').nth(1);
-                await zoomOut.waitFor({ state: 'visible' });
-                for (let i = 0; i < 3; i++) await zoomOut.click();
+                // Fleet-Ops v0.7 rebuilt the editor (order-config-manager/activity-flow): it fits
+                // the whole flow to the screen when it renders, and its controls are in
+                // .oc-flow-zoom — in, out, fit. The v0.6 editor opened at scale 1 under
+                // .activity-flow-zoom-controls and needed three zoom-outs; waiting on that class
+                // timed out on every run from v0.8.0. Press Fit once the controls are up, so the
+                // frame doesn't depend on when the automatic fit ran against the pane's size.
+                const fit = page.locator('.oc-flow-zoom button').nth(2);
+                await fit.waitFor({ state: 'visible' });
+                await fit.click();
             },
             waitForAfterInteract: '.fleetops-pill-tabs .ui-tab.active',
             extraSettleMs: 2500,

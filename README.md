@@ -10,6 +10,7 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/github/license/fleetbase/showcase" alt="License: AGPL-3.0"></a>
   <a href="https://github.com/fleetbase/showcase/actions/workflows/screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/screenshots.yml/badge.svg" alt="Console Screenshots"></a>
   <a href="https://github.com/fleetbase/showcase/actions/workflows/storefront-app-screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/storefront-app-screenshots.yml/badge.svg" alt="Storefront app screenshots"></a>
+  <a href="https://github.com/fleetbase/showcase/actions/workflows/passenger-app-screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/passenger-app-screenshots.yml/badge.svg" alt="Passenger app screenshots"></a>
   <a href="https://github.com/fleetbase/fleetbase/releases"><img src="https://img.shields.io/github/v/release/fleetbase/fleetbase?label=fleetbase" alt="Latest Fleetbase release"></a>
   <a href="https://discord.gg/V7RVWRQ2Wm"><img src="https://img.shields.io/discord/699834923032248430?logo=discord&label=Discord" alt="Discord"></a>
 </p>
@@ -105,6 +106,7 @@ inside, 6 of 8 files were byte-identical across two runs; with this order, 8 of 
 | --- | --- | --- |
 | [Console Screenshots](.github/workflows/screenshots.yml) | Captures the console areas you choose (`iam`, `fleet-ops`, `admin`, `general`, `developers`, `ledger`, `extensions`, `storefront`) and uploads them as an artifact. | Fleetbase release (`repository_dispatch: fleetbase-release`) or by hand |
 | [Storefront app screenshots](.github/workflows/storefront-app-screenshots.yml) | Captures the Storefront app on iOS and Android, per edition, in dark and light, and uploads a review gallery. | Storefront app release (`repository_dispatch: storefront-app-release`) or by hand |
+| [Passenger app screenshots](.github/workflows/passenger-app-screenshots.yml) | Captures the Passenger app on iOS and Android through a whole trip, in dark and light, and uploads a review gallery. | By hand (`repository_dispatch: passenger-app-release` once passenger-app sends it) |
 
 Each run also uploads a review gallery (`console-gallery`, `storefront-app-gallery`), and
 [Publish gallery](.github/workflows/publish-gallery.yml) puts the newest of each from main on
@@ -113,7 +115,8 @@ Each run also uploads a review gallery (`console-gallery`, `storefront-app-galle
 Both open a pull request on fleetbase.io only when asked to: the `open_pr` input, or
 `OPEN_PR_ON_RELEASE=true` for release runs. A plain run only produces images to look at.
 
-Secrets: `SHOWCASE_PASSWORD` (required), `FLEETBASE_IO_TOKEN` (only for `open_pr`), and the
+Secrets: `SHOWCASE_PASSWORD` (required), `FLEETBASE_IO_TOKEN` (only for `open_pr`),
+`PASSENGER_APP_TOKEN` (the Passenger app's checkout while that repository is private), and the
 optional map and payment keys described below.
 
 Prefer the workflows over a local run for anything you intend to publish: the runners are
@@ -161,7 +164,7 @@ table with no data. The manifests' `TABLE_ROW` excludes it. That is the differen
 | `docker-compose.yml` | The stack. Every image is pinned to `${RELEASE_TAG}`; nothing is built. |
 | `docker/caddy/Caddyfile` | The single-origin proxy and its ordered path map. |
 | `scripts/` | `up` → `provision` → `seed` → `capture`, plus `assert-routes` and `freeze-timestamps`. |
-| `scripts/mobile/` | The Storefront app capture: tunnel, fixtures, app `.env`, build and Maestro run. |
+| `scripts/mobile/` | The mobile app captures: tunnel, fixtures, app `.env`, build and Maestro run, for Storefront and (`passenger-*`) Passenger, whose driver actor is `passenger-driver.py`. |
 | `seeders/` | The demo data, bind-mounted into the API container as `Database\Seeders\Showcase\`. |
 | `capture/` | The Playwright capture package, its manifests (one per console area), the compare and the galleries. |
 | [`COVERAGE.md`](COVERAGE.md) | Which fleetbase.io screenshots are generated here, and which are not yet. |
@@ -208,6 +211,30 @@ URL="$(./scripts/mobile/tunnel.sh)"
 APP_URL="$URL" STOREFRONT_BYPASS_VERIFICATION_CODE=123456 STOREFRONT_REVIEW_ACCOUNTS=+6591000201 ./scripts/up.sh
 ./scripts/provision.sh && SHOWCASE_PASSWORD='…' ./scripts/seed.sh && ./scripts/mobile/fixtures.sh
 SIMULATOR_ID=<udid> STOREFRONT_BYPASS_VERIFICATION_CODE=123456 ./scripts/mobile/capture.sh ios ../storefront-app "$URL" store
+```
+
+## Passenger app screenshots (iOS and Android)
+
+`.github/workflows/passenger-app-screenshots.yml` captures the [Passenger app](https://github.com/fleetbase/passenger-app), the white-label rider app on Fleet-Ops, on the same devices as the Storefront app, and proposes the changed images under `public/images/screenshots/passenger-app/{ios,android}/` on fleetbase.io when `open_pr` is set. It is run by hand for now (`app_ref`, `release_tag`, `platforms`, `themes`, `open_pr`).
+
+- **The flows live in the app**, in `passenger-app/.maestro/screenshots`, seven of them in order: sign-in and home, the account screens, booking up to "Finding your driver", then one per step of the trip (on the way, arrived, in progress, the fare and the rating).
+- **A driver plays the other half of the trip.** Between flows, `scripts/mobile/passenger-driver.py` takes the rider's request through the Fleetbase API, the way Navigator would: it accepts as whichever seeded driver holds the offer (sequential dispatch offers one driver at a time), moves the car, and advances the order through `started → arrived → in_progress → completed`. After the rating it deletes the trip, so the light run's history is the same as the dark run's.
+- **The data:** `./scripts/seed.sh organization`, `developers` (the API key) and `passenger` (seeders/Passenger), and nothing else. Passenger is not part of `all`, because online drivers in the CBD would change the console's Fleet-Ops screens; the other areas are left out of this run because their delivery service rates would show as car classes (Fleet-Ops quotes every rate the company has). It makes the company's `passenger` order config from Fleet-Ops' template if the release has not already (it does from Fleet-Ops v0.7.2), with the offer timeout raised to the 120-second maximum so a slow runner can photograph the search first; Standard (sedans) and XL (MPVs) service rates priced from the trip's distance and time; drivers online around Marina Bay Sands; and the rider Sophie Lim (`+6591000301`) with saved Home and Work places and five past trips.
+- **Signing in:** the real flow. Each run generates a code and starts the stack with `FLEETOPS_CUSTOMER_VERIFICATION_BYPASS_CODE` and `FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS=+6591000301`, Fleet-Ops' review-account bypass for its customer API.
+- **What the app is built with:** `scripts/mobile/passenger-fixtures.sh` reads the API key (the Developers area's "Production Backend"), the order config, the rider, the pickup and the online drivers from the database (`scripts/passenger-fixtures.php`), and `scripts/mobile/passenger-app-env.sh` writes the app's `.env`: `FLEETBASE_HOST` (the tunnel), `FLEETBASE_API_KEY`, `FLEETBASE_ORDER_CONFIG=passenger`, and for Android `GOOGLE_MAPS_API_KEY` (the `PASSENGER_APP_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` secret). iOS draws Apple Maps and needs no key.
+- **Private repository:** until passenger-app is public, its checkout uses `PASSENGER_APP_TOKEN`, a fine-grained token with read access to the contents of `fleetbase/passenger-app`. This repository is public, so a run's artifacts (the gallery included) can be downloaded by anyone signed in to GitHub; run it once the app is ready to be seen.
+- **Review:** every run uploads `passenger-app-gallery` (`capture/bin/gallery-mobile.mjs --app passenger-app`, screen list in `capture/src/passenger-app-screens.mjs`). It is not published to GitHub Pages yet.
+- **Output:** `capture/out/passenger-app/<platform>/*.png`, encoded to lossless WebP by `capture/bin/encode-mobile.mjs`. Names follow [NAMING.md](NAMING.md).
+- **Not fixed between runs:** the final fare (`passenger-app-fare-details`) is repriced from the trip the driver actually made, so its amount moves by a few cents, and the pixel gate will propose it on most runs. The pickup reads "Current location" unless the stack has a Google Maps key to name it from its coordinates.
+
+Locally, with a simulator booted and the stack seeded with those three areas. On a busy machine, `docker compose stop scheduler` first: its scheduled jobs can slow the API enough for the flows' waits to run out, and the capture doesn't need them.
+
+```bash
+./scripts/mobile/passenger-fixtures.sh
+```
+
+```bash
+SIMULATOR_ID=booted PASSENGER_VERIFICATION_CODE=<the code the stack was started with> ./scripts/mobile/passenger-capture.sh ios ../passenger-app http://localhost
 ```
 
 ## Google Maps variants

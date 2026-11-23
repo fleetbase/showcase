@@ -13,14 +13,14 @@ that brings the existing files onto this scheme.
 
 | Part | Rule |
 |---|---|
-| `area` | The product surface, and **always** the folder the file lives in: `fleet-ops`, `iam`, `console`, `admin`, `developers`, `extensions`, `ledger`, `storefront`, `customer-portal`, `navigator-app`, `storefront-app`, `pallet` |
+| `area` | The product surface, and **always** the folder the file lives in: `fleet-ops`, `iam`, `console`, `admin`, `developers`, `extensions`, `ledger`, `storefront`, `customer-portal`, `navigator-app`, `storefront-app`, `passenger-app`, `pallet` |
 | `subject` | The resource. **Plural** for a collection (`orders-list`), **singular** for one record (`order-details`) |
 | `view` | One word from the closed vocabulary below — never a synonym |
 | `qualifier` | Only when two screenshots of the same view differ meaningfully: `-multi-stop`, `-s3`, `-smtp`, `-empty` |
 | `-google` | The Google Maps variant of a live-map screen; Leaflet is unsuffixed |
 | `-light` | The light-theme variant; dark is unsuffixed, matching the published library |
 
-Mobile app screenshots add one folder level for the platform, `storefront-app/ios/` and `storefront-app/android/`, and otherwise follow the same rule: `storefront-app-product-details.webp`, `storefront-app-store-details-network-light.webp`.
+Mobile app screenshots add one folder level for the platform, `storefront-app/ios/` and `storefront-app/android/` (and the same for `passenger-app/`), and otherwise follow the same rule: `storefront-app-product-details.webp`, `storefront-app-store-details-network-light.webp`.
 
 ### The view vocabulary
 
