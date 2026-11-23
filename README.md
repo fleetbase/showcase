@@ -10,6 +10,7 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/github/license/fleetbase/showcase" alt="License: AGPL-3.0"></a>
   <a href="https://github.com/fleetbase/showcase/actions/workflows/screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/screenshots.yml/badge.svg" alt="Console Screenshots"></a>
   <a href="https://github.com/fleetbase/showcase/actions/workflows/storefront-app-screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/storefront-app-screenshots.yml/badge.svg" alt="Storefront app screenshots"></a>
+  <a href="https://github.com/fleetbase/showcase/actions/workflows/passenger-app-screenshots.yml"><img src="https://github.com/fleetbase/showcase/actions/workflows/passenger-app-screenshots.yml/badge.svg" alt="Passenger app screenshots"></a>
   <a href="https://github.com/fleetbase/fleetbase/releases"><img src="https://img.shields.io/github/v/release/fleetbase/fleetbase?label=fleetbase" alt="Latest Fleetbase release"></a>
   <a href="https://discord.gg/V7RVWRQ2Wm"><img src="https://img.shields.io/discord/699834923032248430?logo=discord&label=Discord" alt="Discord"></a>
 </p>

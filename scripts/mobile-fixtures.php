@@ -58,6 +58,34 @@ try {
         }
     }
 
+    // The stores that sell bookable services keep their hours, but get them on every day: the
+    // Network flow books "tomorrow", and the spa is seeded closed on Mondays, so a run on a Sunday
+    // found no times to book and failed (2026-11-01). Each closed day gets the store's usual
+    // hours; the console never sees this, as only the mobile capture runs it.
+    $bookingLocationUuids = \Fleetbase\Storefront\Models\StoreLocation::whereIn('store_uuid', $bookingStoreUuids)->pluck('uuid');
+    foreach ($bookingLocationUuids as $locationUuid) {
+        $hours = \Fleetbase\Storefront\Models\StoreHour::where('store_location_uuid', $locationUuid)->get();
+        $usual = $hours->first();
+        if (!$usual) {
+            continue;
+        }
+        $open = $hours->pluck('day_of_week')->map(fn ($day) => ucfirst(strtolower($day)))->all();
+        foreach (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day) {
+            if (in_array($day, $open, true)) {
+                continue;
+            }
+            $hour = new \Fleetbase\Storefront\Models\StoreHour();
+            $hour->forceFill([
+                'uuid'                => (string) \Illuminate\Support\Str::uuid(),
+                'store_location_uuid' => $locationUuid,
+                'day_of_week'         => $day,
+                'start'               => $usual->start,
+                'end'                 => $usual->end,
+            ]);
+            \Fleetbase\Storefront\Models\StoreHour::withoutEvents(fn () => $hour->save());
+        }
+    }
+
     $point = function ($location) {
         if (!$location || !method_exists($location, 'getLat')) {
             return null;
