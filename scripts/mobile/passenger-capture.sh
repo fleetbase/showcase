@@ -139,6 +139,11 @@ run_flow() {
     local flow="$1" theme="$2" suffix="$3" shots="$4"
     local debug="${OUT}/debug/${theme}/${flow}"
     mkdir -p "$debug"
+    # The emulator's own GPS at the pickup as well as Maestro's setLocation: the app's position
+    # request gets an answer from the GPS provider whichever way the system routes it.
+    if [[ "$PLATFORM" == android ]]; then
+        adb emu geo fix "$LNG" "$LAT" >/dev/null 2>&1 || true
+    fi
     # Where takeScreenshot writes has moved between Maestro versions, so run in SHOTS with SHOTS
     # as the output directory and collect by name from anywhere it may have landed.
     if (cd "$shots" && maestro test --test-output-dir "$debug" "$APP_DIR/.maestro/screenshots/${flow}.yaml" \

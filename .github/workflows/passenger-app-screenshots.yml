@@ -180,7 +180,7 @@ jobs:
           FLEETOPS_CUSTOMER_REVIEW_ACCOUNTS: ${{ env.RIDER_PHONE }}
           # Optional. With a key the API can name the rider's pickup from her coordinates (a
           # reverse geocode); without one the app shows "Current location".
-          GOOGLE_MAPS_API_KEY: ${{ secrets.PASSENGER_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.PASSENGER_APP_GOOGLE_MAPS_API_KEY || secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY }}
         run: ./scripts/up.sh
 
       - name: Provision
@@ -357,7 +357,7 @@ jobs:
       - name: Build the APK
         env:
           CAPTURE_PHASE: build
-          GOOGLE_MAPS_API_KEY: ${{ secrets.PASSENGER_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.PASSENGER_APP_GOOGLE_MAPS_API_KEY || secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY }}
         run: ./scripts/mobile/passenger-capture.sh android app "${{ steps.stack.outputs.url }}"
 
       - name: Stop the build daemons
@@ -373,7 +373,7 @@ jobs:
         env:
           CAPTURE_THEMES: ${{ needs.config.outputs.themes }}
           PASSENGER_VERIFICATION_CODE: ${{ steps.stack.outputs.code }}
-          GOOGLE_MAPS_API_KEY: ${{ secrets.PASSENGER_APP_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.PASSENGER_APP_GOOGLE_MAPS_API_KEY || secrets.STOREFRONT_APP_GOOGLE_MAPS_API_KEY }}
         with:
           api-level: 35
           target: google_apis
