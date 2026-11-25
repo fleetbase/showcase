@@ -1,6 +1,6 @@
 # Extension icons
 
-One tile per seeded extension, named by its slug in `ExtensionsSeeder::catalogue()`. Each is a
+One tile per seeded extension, named by its slug in `MarketplaceSeeder::catalogue()` (registry-bridge before 0.3.0; later releases use `../media/icons`). Each is a
 Font Awesome 6 Free solid glyph (CC BY 4.0 — the same icon set the console ships) in white on a
 diagonal gradient, 800×600 JPEG, generated rather than drawn so the set stays consistent.
 

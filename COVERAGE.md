@@ -127,7 +127,7 @@ The stock Storefront app is now captured on iOS and Android by `storefront-app-s
 | `storefront-app/true-vegan/true-vegan-checkout-screen.webp` | 2 | Mobile app (React Native) — a separate simulator pipeline, not console capture. |
 | `storefront-app/true-vegan/true-vegan-products-screen.webp` | 2 | Mobile app (React Native) — a separate simulator pipeline, not console capture. |
 | `extensions/extensions-cli-search.webp` | 1 | A terminal screenshot of the CLI — not the console. |
-| `extensions/extensions-purchased-list.webp` | 1 | Blocked: registry-bridge purchased.hbs passes @extension to a card that reads @resource (fix in progress). |
+| `extensions/extensions-purchased-list.webp` | 1 | Captured from Fleetbase v0.9.0 (registry-bridge 0.3.0), whose Purchased screen works. Before that: registry-bridge purchased.hbs passes @extension to a card that reads @resource. |
 | `navigator-app/navigator-app-account-screen.webp` | 1 | Mobile app (React Native) — a separate simulator pipeline, not console capture. |
 | `navigator-app/navigator-app-chat-conversation-screen.webp` | 1 | Mobile app (React Native) — a separate simulator pipeline, not console capture. |
 | `navigator-app/navigator-app-chats-screen.webp` | 1 | Mobile app (React Native) — a separate simulator pipeline, not console capture. |
@@ -173,7 +173,7 @@ Automated today, but the data or state on screen is wrong. Fix before relying on
 | `ledger-report-wallet-summary`, `ledger-wallets-list`, `ledger-wallet-details` | every wallet $0.00, USD | open — the org has no currency |
 | `ledger-journal-list` | Storefront sale entries dated on the run day | open |
 | `ledger-transactions-list` | descriptions read "Storefront testing order" | open |
-| `extensions-purchased-list` | every card blank (registry-bridge bug) | blocked upstream; not captured |
+| `extensions-purchased-list` | every card blank (registry-bridge bug) | fixed in registry-bridge 0.3.0; captured from Fleetbase v0.9.0, not before |
 
 ## Determinism
 

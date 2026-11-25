@@ -163,6 +163,7 @@ table with no data. The manifests' `TABLE_ROW` excludes it. That is the differen
 | --- | --- |
 | `docker-compose.yml` | The stack. Every image is pinned to `${RELEASE_TAG}`; nothing is built. |
 | `docker/caddy/Caddyfile` | The single-origin proxy and its ordered path map. |
+| `docker/registry/server.mjs` | A stand-in for the Registry Service, which the Extensions screens read from. See [Extensions](#extensions). |
 | `scripts/` | `up` → `provision` → `seed` → `capture`, plus `assert-routes` and `freeze-timestamps`. |
 | `scripts/mobile/` | The mobile app captures: tunnel, fixtures, app `.env`, build and Maestro run, for Storefront and (`passenger-*`) Passenger, whose driver actor is `passenger-driver.py`. |
 | `seeders/` | The demo data, bind-mounted into the API container as `Database\Seeders\Showcase\`. |
@@ -188,6 +189,48 @@ its rows `fleetops-testing` and be purged by Fleet-Ops' own seeder.
 There is no Faker: the published API image is installed `--no-dev`, and fixed values are what
 determinism wants anyway. The people and companies in the seed data are fictional; the
 places are real Singapore locations.
+
+## Extensions
+
+From Fleetbase v0.9.0 (registry-bridge 0.3.0) the Extensions screens do not read a catalogue
+from the instance's database. The API asks the [Registry Service](https://github.com/fleetbase/registry)
+for it, and for what the instance has installed and bought. So this area is seeded differently
+from the others:
+
+| Piece | What it does |
+| --- | --- |
+| `seeders/Extensions/catalog.json` | The catalogue: 29 extensions in 12 categories, with prices, versions, highlights, setup steps and which are installed or bought. The one file to edit. |
+| `docker/registry/server.mjs` | The `registry` service in the stack. It answers the API's Registry Service requests from `catalog.json`, in the service's own response shapes. It keeps no state. |
+| `seeders/Extensions/RegistryServiceSeeder.php` | Registers the instance with the stand-in, the way an admin does from Registry Config, and records the installed extensions with their auto-update policies. |
+| `seeders/Extensions/media/` | Icons and screenshots, served to the browser at `/showcase-registry/` by the proxy. |
+
+The real service is not booted because it publishes no image, and seeding it would mean
+writing its internal tables from here. The screens only need its answers.
+
+The catalogue mixes extensions that exist (Pallet, Customer Portal, flespi, Valhalla, VROOM)
+with integrations that are planned and not released (Shopify, Uber Direct, QuickBooks and
+others), and a few invented third-party publishers. It is demo data, like the rest of the seed.
+
+To add or change an extension, edit `catalog.json`, then draw its icon:
+
+```bash
+npm install --prefix /tmp/fa @fortawesome/free-solid-svg-icons@6
+```
+
+```bash
+node seeders/Extensions/build-icons.mjs /tmp/fa/node_modules/@fortawesome/free-solid-svg-icons
+```
+
+`capture/test/extensions.test.mjs` checks that the catalogue, the stand-in and the manifest
+still agree (every extension has its icon, every captured screen has the data it is named for):
+
+```bash
+cd capture && node --test test/extensions.test.mjs
+```
+
+On releases before v0.9.0 `ExtensionsSeeder` runs `MarketplaceSeeder` instead, which writes the
+old marketplace tables, and the manifest captures the old screens. Both sets are gated on the
+registry-bridge version the console reports.
 
 ## Storefront app screenshots (iOS and Android)
 
@@ -297,6 +340,7 @@ license as Fleetbase.
 
 Bundled media keeps its own terms: the store and product photos in `seeders/Storefront/images/`
 are from [Unsplash](https://unsplash.com) under the [Unsplash License](https://unsplash.com/license)
-(credits in the folder's READMEs); the extension tiles in `seeders/Extensions/icons/` use
+(credits in the folder's READMEs); the extension icons in `seeders/Extensions/icons/` and
+`seeders/Extensions/media/icons/` use
 [Font Awesome Free](https://fontawesome.com/license/free) icons (CC BY 4.0). The Fleetbase name
 and logo are not covered by the license.
