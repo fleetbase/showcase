@@ -46,6 +46,16 @@ x-api-env: &api-env
   # SEEDED_FIXTURES output the capture depends on greping for.
   LOG_LEVEL: warning
   REGISTRY_HOST: https://registry.fleetbase.io
+  # From registry-bridge 0.3.0 (Fleetbase v0.9.0) the Extensions screens read their catalogue
+  # from the Registry Service, not from this database. The `registry` service below stands in
+  # for it; ExtensionsSeeder registers this instance with it. Older releases never read this.
+  REGISTRY_SERVICE_URL: http://registry:8080
+  # What the stock docker-compose.yml sets: the console's own module versions, which the API
+  # needs to tell that an extension's prebuilt console files will load. Without it every
+  # extension reads "needs the console to be rebuilt" and no Get button is shown.
+  REGISTRY_HOST_MODULES_PATH: http://console:4200/host-modules.json
+  # Every extension counts as already in the image: an install only writes the install record,
+  # inside the request. Nothing is downloaded, and no installer worker is needed.
   REGISTRY_PREINSTALLED_EXTENSIONS: "true"
   OSRM_HOST: https://router.project-osrm.org
   # Order ETAs: by default Fleet-Ops tries Google Routes (no key here), then the public OSRM
@@ -90,6 +100,9 @@ services:
       - caddy-data:/data
       # /storage/* is served from here — see the Caddyfile.
       - api-storage:/srv/api-storage:ro
+      # /showcase-registry/* — the extension icons and screenshots the registry stand-in's
+      # catalogue points at. The browser loads them, so they have to be on this origin.
+      - ./seeders/Extensions/media:/srv/registry-media:ro
     depends_on:
       - console
       - application
@@ -143,6 +156,27 @@ services:
       interval: 30s
       timeout: 5s
       retries: 1
+
+  # ── The Registry Service stand-in ────────────────────────────────────────────────────
+  # Answers the API's catalogue and instance requests from seeders/Extensions/catalog.json.
+  # See docker/registry/server.mjs for why the real service is not booted here. Only the API
+  # reaches it; it has no dependencies, so a stock Node image runs it as is.
+  registry:
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ["node", "/srv/registry/server.mjs"]
+    environment:
+      CATALOG: /srv/data/catalog.json
+      MEDIA_DIR: /srv/data/media
+      MEDIA_BASE: /showcase-registry
+    volumes:
+      - ./docker/registry:/srv/registry:ro
+      - ./seeders/Extensions:/srv/data:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   socket:
     image: socketcluster/socketcluster:v17.4.0

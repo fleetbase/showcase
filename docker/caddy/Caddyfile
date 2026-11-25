@@ -98,6 +98,17 @@
 		reverse_proxy socket:8000
 	}
 
+	# Extension icons and screenshots for the Extensions screens. The registry stand-in
+	# (docker/registry/server.mjs) answers the API, not the browser, so its catalogue names
+	# these as origin-relative paths (/showcase-registry/icons/<slug>.svg) and they are served
+	# here, from seeders/Extensions/media. Relative, because the capture browser reaches this
+	# proxy as http://proxy in CI and http://localhost on a laptop. Not an API prefix, so it is
+	# outside the @api matcher and scripts/assert-routes.sh has nothing to say about it.
+	handle_path /showcase-registry/* {
+		root * /srv/registry-media
+		file_server
+	}
+
 	# Everything else is the console SPA: /, /fleet-ops/*, /iam/*, /storefront/*, /ledger/*,
 	# /developers/*, /~/:slug, /install, /onboard, /auth/*, /join/*, /assets/*,
 	# /extensions.json.
