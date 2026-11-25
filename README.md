@@ -199,7 +199,7 @@ from the others:
 
 | Piece | What it does |
 | --- | --- |
-| `seeders/Extensions/catalog.json` | The catalogue: 29 extensions in 12 categories, with prices, versions, highlights, setup steps and which are installed or bought. The one file to edit. |
+| `seeders/Extensions/catalog.json` | The catalogue: 24 extensions in 9 categories, with prices, versions, highlights, setup steps and which are installed or bought. The one file to edit. |
 | `docker/registry/server.mjs` | The `registry` service in the stack. It answers the API's Registry Service requests from `catalog.json`, in the service's own response shapes. It keeps no state. |
 | `seeders/Extensions/RegistryServiceSeeder.php` | Registers the instance with the stand-in, the way an admin does from Registry Config, and records the installed extensions with their auto-update policies. |
 | `seeders/Extensions/media/` | Icons and screenshots, served to the browser at `/showcase-registry/` by the proxy. |
@@ -207,9 +207,13 @@ from the others:
 The real service is not booted because it publishes no image, and seeding it would mean
 writing its internal tables from here. The screens only need its answers.
 
-The catalogue mixes extensions that exist (Pallet, Customer Portal, flespi, Valhalla, VROOM)
-with integrations that are planned and not released (Shopify, Uber Direct, QuickBooks and
-others), and a few invented third-party publishers. It is demo data, like the rest of the seed.
+The catalogue mixes extensions that exist (flespi, Samsara, LocoNav, Lalamove) with
+integrations that are planned and not released (Shopify, Uber Direct, QuickBooks and others),
+and a few invented third-party publishers. It is demo data, like the rest of the seed.
+
+It has no core modules. Fleet-Ops, Storefront, Ledger, Customer Portal, Pallet, AI, Valhalla
+and VROOM ship with Fleetbase and are not installed from the registry, so they are not listed
+there; a test keeps them out.
 
 To add or change an extension, edit `catalog.json`, then draw its icon:
 

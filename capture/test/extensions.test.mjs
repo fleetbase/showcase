@@ -32,24 +32,35 @@ test('every extension has a unique slug, an icon and the screenshots it names', 
     }
 });
 
+test('no core module is in the catalogue', () => {
+    // What ships with Fleetbase is not installed from the registry, so it is never listed there.
+    // The console's own modules, and Pallet, which registry-bridge also counts as core.
+    const core = ['fleetops', 'storefront', 'ledger', 'iam', 'dev', 'registry-bridge', 'customer-portal', 'pallet', 'ai', 'valhalla', 'vroom'];
+    for (const extension of catalog.extensions) {
+        assert.ok(!core.includes(extension.summary.slug), `[${extension.summary.slug}] is a core module, not a registry extension`);
+    }
+});
+
 test('ids are derived from the slug, by the rule RegistryServiceSeeder repeats in PHP', () => {
-    // sha1("showcase:extension:pallet"), first ten hex characters.
-    assert.equal(publicId('ext', 'extension:pallet'), 'ext_757d9c9605');
-    assert.equal(bySlug('pallet').id, 'ext_757d9c9605');
+    // sha1("showcase:extension:shopify"), first ten hex characters.
+    assert.equal(publicId('ext', 'extension:shopify'), 'ext_684e95f15c');
+    assert.equal(bySlug('shopify').id, 'ext_684e95f15c');
 });
 
 test('the catalogue list pages, sorts and filters like the service', () => {
     const first = get('/v1/catalog/extensions');
     assert.equal(first.status, 200);
-    assert.deepEqual(first.body.meta, { total: 29, per_page: 24, current_page: 1, last_page: 2, from: 1, to: 24 });
-    assert.equal(get('/v1/catalog/extensions', { page: '2' }).body.data.length, 5);
+    assert.deepEqual(first.body.meta, { total: 24, per_page: 24, current_page: 1, last_page: 1, from: 1, to: 24 });
+    const second = get('/v1/catalog/extensions', { page: '2', limit: '10' });
+    assert.deepEqual(second.body.meta, { total: 24, per_page: 10, current_page: 2, last_page: 3, from: 11, to: 20 });
+    assert.equal(get('/v1/catalog/extensions', { page: '3', limit: '10' }).body.data.length, 4);
 
     // Popular is the default: most installs first.
     const installs = first.body.data.map((extension) => extension.installs_count);
     assert.deepEqual(installs, [...installs].sort((a, b) => b - a));
 
     // Discover's banner: the staff-featured three, in their order.
-    assert.deepEqual(names(get('/v1/catalog/extensions', { featured: '1', sort: 'featured', limit: '3' })), ['Customer Portal', 'Shopify', 'flespi']);
+    assert.deepEqual(names(get('/v1/catalog/extensions', { featured: '1', sort: 'featured', limit: '3' })), ['Shopify', 'flespi', 'Uber Direct']);
 
     const telematics = get('/v1/catalog/extensions', { category: 'telematics', sort: 'name' });
     assert.ok(telematics.body.data.every((extension) => extension.category.slug === 'telematics'));
@@ -65,7 +76,7 @@ test('the catalogue list pages, sorts and filters like the service', () => {
 });
 
 test('a listing is found by slug, id or package name, with the detail fields', () => {
-    const detail = get('/v1/catalog/extensions/customer-portal');
+    const detail = get('/v1/catalog/extensions/flespi');
     assert.equal(detail.status, 200);
     for (const field of ['description', 'screenshots', 'versions', 'requires_extensions', 'highlights', 'setup_steps', 'latest_release', 'packages', 'price', 'publisher', 'category']) {
         assert.ok(field in detail.body, `detail is missing ${field}`);
@@ -75,9 +86,9 @@ test('a listing is found by slug, id or package name, with the detail fields', (
     // must be rebuilt, and no extension can be installed.
     assert.ok(detail.body.latest_release.dist.sha256);
 
-    assert.equal(get(`/v1/catalog/extensions/${detail.body.id}`).body.slug, 'customer-portal');
-    assert.equal(get(`/v1/catalog/extensions/${encodeURIComponent('@fleetbase/customer-portal-engine')}`).body.slug, 'customer-portal');
-    assert.equal(get('/v1/catalog/extensions/customer-portal/releases').body.latest, '0.2.0');
+    assert.equal(get(`/v1/catalog/extensions/${detail.body.id}`).body.slug, 'flespi');
+    assert.equal(get(`/v1/catalog/extensions/${encodeURIComponent('@fleetbase/flespi-engine')}`).body.slug, 'flespi');
+    assert.equal(get('/v1/catalog/extensions/flespi/releases').body.latest, '0.2.1');
 
     const missing = get('/v1/catalog/extensions/not-an-extension');
     assert.equal(missing.status, 404);
@@ -118,15 +129,15 @@ test('installed, updates and licences come from the same catalogue entries', () 
 
     const licences = get('/v1/instances/me', {}, INSTANCE_TOKEN).body.licences;
     const paid = licences.filter((licence) => licence.kind === 'paid').map((licence) => licence.extension.slug);
-    assert.deepEqual(paid.sort(), ['customer-portal', 'flespi']);
+    assert.deepEqual(paid.sort(), ['driver-scorecards', 'flespi', 'whatsapp']);
 });
 
 test('reporting an install changes nothing', () => {
     const before = JSON.stringify(get('/v1/instances/me/updates', {}, INSTANCE_TOKEN).body);
-    const report = route(catalog, { method: 'POST', path: '/v1/instances/me/installs', token: INSTANCE_TOKEN, body: { extension: bySlug('pallet').id, version: '0.4.2', status: 'installed' } });
+    const report = route(catalog, { method: 'POST', path: '/v1/instances/me/installs', token: INSTANCE_TOKEN, body: { extension: bySlug('shopify').id, version: '1.0.2', status: 'installed' } });
     assert.equal(report.status, 200);
     assert.equal(report.body.install.status, 'installed');
-    assert.equal(route(catalog, { method: 'DELETE', path: `/v1/instances/me/installs/${bySlug('vroom').id}`, token: INSTANCE_TOKEN }).body.install.status, 'uninstalled');
+    assert.equal(route(catalog, { method: 'DELETE', path: `/v1/instances/me/installs/${bySlug('lalamove').id}`, token: INSTANCE_TOKEN }).body.install.status, 'uninstalled');
     assert.equal(JSON.stringify(get('/v1/instances/me/updates', {}, INSTANCE_TOKEN).body), before);
 });
 

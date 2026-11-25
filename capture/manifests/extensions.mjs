@@ -8,7 +8,9 @@
 //   0.3.0 onwards  Discover, category and extension pages, Installed, Updates and Purchased,
 //                  read from the Registry Service. In this stack that is the stand-in at
 //                  docker/registry/server.mjs serving seeders/Extensions/catalog.json;
-//                  RegistryServiceSeeder registers the instance with it.
+//                  RegistryServiceSeeder registers the instance with it. The catalogue has
+//                  no core modules (Customer Portal, Pallet, AI, Valhalla, VROOM): those
+//                  ship with Fleetbase and are not installed from the registry.
 //
 // Where a new screen replaces an old one it keeps the old file name (extensions-browse,
 // extensions-install, extensions-installed-list, extensions-uninstall), so the pages on
@@ -46,7 +48,7 @@ const expectText = (text) => async (page) => {
 };
 
 const STORE = [
-    // Discover: the featured banner, the category rail and the shelves. catalog.json has 29
+    // Discover: the featured banner, the category rail and the shelves. catalog.json has 24
     // extensions; the shelves show eight each.
     { id: 'discover', file: 'extensions-browse', url: '/extensions', waitFor: '.rb-featured', expectRows: { selector: ACTION, min: 8 }, extraSettleMs: 3000 },
     {
@@ -68,14 +70,14 @@ const STORE = [
         extraSettleMs: 1500,
     },
     // Search results, with the sort and filter toolbar. "orders" matches the e-commerce and
-    // ERP connectors and Customer Portal.
+    // ERP connectors and the courier networks.
     { id: 'search', file: 'extensions-search-list', url: '/extensions?query=orders', waitFor: '.rb-results-head', expectRows: { selector: LISTING, min: 4 }, extraSettleMs: 2000 },
 
-    // An extension's page. Customer Portal is installed and bought, and the only listing with
-    // four screenshots, so this is the fullest page: Open, the screenshots, what you get.
-    extensionPage('extension-details', 'extensions-extension-details', 'customer-portal', { expectRows: { selector: '.rb-shots img', min: 3 } }),
+    // An extension's page. flespi is installed and bought, and the only listing with
+    // screenshots, so this is the fullest page: Open, the screenshots, what you get.
+    extensionPage('extension-details', 'extensions-extension-details', 'flespi', { expectRows: { selector: '.rb-shots img', min: 3 } }),
     // Free and not installed: the page a customer installs from.
-    extensionPage('extension-install', 'extensions-install', 'pallet', { expectRows: { selector: `.rb-extension-actions ${ACTION}`, min: 1 }, interact: expectText(/^\s*Get\b/) }),
+    extensionPage('extension-install', 'extensions-install', 'shopify', { expectRows: { selector: `.rb-extension-actions ${ACTION}`, min: 1 }, interact: expectText(/^\s*Get\b/) }),
     // Paid and not bought: the Buy button with its price.
     extensionPage('extension-paid', 'extensions-extension-details-paid', 'billing', { expectRows: { selector: `.rb-extension-actions ${ACTION}`, min: 1 }, interact: expectText(/Buy\s*·/) }),
     // Its newest release needs a newer Fleetbase than any release this stack can run, so the
@@ -83,7 +85,7 @@ const STORE = [
     extensionPage('extension-blocked', 'extensions-extension-details-blocked', 'cold-chain-monitor', { interact: expectText("Can't install yet") }),
     {
         // The What's new tab of an extension with an update waiting: release notes and versions.
-        ...extensionPage('extension-whats-new', 'extensions-extension-whats-new', 'flespi'),
+        ...extensionPage('extension-whats-new', 'extensions-extension-whats-new', 'lalamove'),
         interact: async (page) => {
             await page.locator('.rb-tab', { hasText: /what.s new/i }).click();
         },

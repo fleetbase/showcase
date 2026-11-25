@@ -17,4 +17,5 @@ with the console's own monogram (its first letter on a colour).
 ## screenshots/
 
 The images on an extension's page, listed under `screenshots` in its catalogue entry. They are
-Fleetbase's own published console screenshots (from fleetbase.io), resized to 1600 px wide.
+Fleetbase's own published console screenshots (from fleetbase.io), resized to 1600 px wide:
+the Fleet-Ops telematics, devices and sensors screens, for flespi.
